@@ -1,0 +1,8 @@
+[package]
+name = "particle_filter_create3"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+particle_filter = {git = "https://github.com/gjf2a/particle_filter"}
+anyhow = "1.0.101"
