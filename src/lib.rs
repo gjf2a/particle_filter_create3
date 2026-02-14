@@ -1,4 +1,3 @@
-pub mod grid_based;
 pub mod circle_obstacles;
 
 use std::{fmt::Display, fs::File, io::{BufRead, BufReader}, str::FromStr};
@@ -139,22 +138,6 @@ mod tests {
     };
 
     use super::*;
-
-    #[test]
-    fn bump_types() {
-        let file = BufReader::new(File::open("odometry_2026-02-12_10-49-47.out").unwrap());
-        let mut bumps = std::collections::BTreeSet::new();
-        for line in file.lines() {
-            let line = line.unwrap();
-            if line.starts_with("[") {
-                bumps.insert(line);
-            }
-        }
-        println!("bump types");
-        for bump in bumps {
-            println!("{bump}");
-        }
-    }
 
     #[test]
     fn test_transcript() {
