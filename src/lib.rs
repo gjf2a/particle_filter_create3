@@ -17,7 +17,7 @@ impl Display for SensorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Pose(pose) => {
-                write!(f, "{} {} {}", pose.pos[0], pose.pos[1], pose.theta)
+                write!(f, "{} {} {}", f2py(pose.pos[0]), f2py(pose.pos[1]), f2py(pose.theta))
             }
             Self::Bump(bump) => {
                 let bump_str = match bump {
@@ -31,6 +31,34 @@ impl Display for SensorInfo {
             }
         }
     }
+}
+
+// From Perplexity
+fn f64_dec_exp(x: f64) -> i32 {
+    if x == 0.0 { return 0; }
+    x.abs().log10().floor() as i32
+}
+
+fn f2py(f: f64) -> String {
+    let mut buffer = ryu::Buffer::new();
+    let mut s = buffer.format(f).to_string();
+    if !s.contains(".") {
+        s = format!("{s}.0");
+    }
+    if s.contains("e") && !s.contains("e-") {
+        s = s.replace("e", "e+");
+    }
+    if f64_dec_exp(f) == -5 {
+        s = format!("{f:e}");
+    }
+    for i in 1..=9 {
+        let negexp = format!("e-{i}");
+        if s.ends_with(negexp.as_str()) {
+            let pynegexp = format!("e-0{i}");
+            s = s.replace(negexp.as_str(), pynegexp.as_str());
+        }
+    }
+    s
 }
 
 impl FromStr for SensorInfo {
@@ -119,6 +147,8 @@ mod tests {
             let line = line.unwrap();
             let line_info = line.parse::<SensorInfo>().unwrap();
             assert_eq!(line_info, transcript[i]);
+            let transcript_line = format!("{}", transcript[i]);
+            assert_eq!(transcript_line, line);
         }
     }
 }

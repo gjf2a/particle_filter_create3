@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 particle_filter = {git = "https://github.com/gjf2a/particle_filter"}
 anyhow = "1.0.101"
+ryu = "1.0.23"
