@@ -1,6 +1,11 @@
-use std::{fmt::Display, fs::File, io::{BufRead, BufReader}, str::FromStr};
+pub mod grid_based;
+pub mod circle_obstacles;
 
+use std::{fmt::Display, fs::File, io::{BufRead, BufReader}, str::FromStr};
+use std::f64::consts::PI;
 use particle_filter::{RobotPose, point::FloatPoint};
+
+pub const CREATE3_RADIUS: f64 = 0.2032; // meters
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {
@@ -112,6 +117,18 @@ pub enum Bump {
     FrontRight,
     Left,
     Right,
+}
+
+impl Bump {
+    pub fn angle_offset(&self) -> f64 {
+        match self {
+            Bump::FrontCenter => 0.0,
+            Bump::FrontLeft => -PI/4.0,
+            Bump::FrontRight => PI/4.0,
+            Bump::Left => -PI/2.0,
+            Bump::Right => PI/2.0,
+        }
+    }
 }
 
 #[cfg(test)]
