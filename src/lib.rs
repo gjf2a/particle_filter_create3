@@ -122,10 +122,10 @@ impl Bump {
     pub fn angle_offset(&self) -> f64 {
         match self {
             Bump::FrontCenter => 0.0,
-            Bump::FrontLeft => -PI/4.0,
-            Bump::FrontRight => PI/4.0,
-            Bump::Left => -PI/2.0,
-            Bump::Right => PI/2.0,
+            Bump::FrontLeft => PI/4.0,
+            Bump::FrontRight => -PI/4.0,
+            Bump::Left => PI/2.0,
+            Bump::Right => -PI/2.0,
         }
     }
 }
