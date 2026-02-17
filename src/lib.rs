@@ -1,9 +1,29 @@
 pub mod circle_obstacles;
 
-use std::{f64::consts::PI, fmt::Display, fs::File, io::{BufRead, BufReader}, str::FromStr};
-use particle_filter::{FloatPoint, Radians, RobotPose};
+use particle_filter::{Degrees, FloatPoint, Radians, RobotPose, Sensor};
+use rand_distr::{Distribution, Normal};
+use std::{
+    f64::consts::PI,
+    fmt::Display,
+    fs::File,
+    io::{BufRead, BufReader},
+    str::FromStr,
+};
 
 pub const CREATE3_RADIUS: f64 = 0.2032; // meters
+
+pub fn noise(pose: RobotPose, sensors: &SensorInfo) -> RobotPose {
+    let mut rng = rand::rng();
+    let (stdev_x_y, stdev_theta) = match sensors {
+        SensorInfo::Pose(_) => (7e-4, Degrees::new(2.0)),
+        SensorInfo::Bump(_) => (0.16, Degrees::new(3.1)),
+    };
+    let x_y_gaussian = Normal::new(0.0, stdev_x_y).unwrap();
+    let theta_gaussian = Normal::new(0.0, stdev_theta.into()).unwrap();
+    let x_y_noise = FloatPoint::new([x_y_gaussian.sample(&mut rng), x_y_gaussian.sample(&mut rng)]);
+    let theta_noise = Degrees::new(theta_gaussian.sample(&mut rng));
+    RobotPose { pos: (pose.pos + x_y_noise), theta: pose.theta + theta_noise.into()}
+}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {
@@ -20,7 +40,13 @@ impl Display for SensorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Pose(pose) => {
-                write!(f, "{} {} {}", f2py(pose.pos[0]), f2py(pose.pos[1]), f2py(pose.theta.into()))
+                write!(
+                    f,
+                    "{} {} {}",
+                    f2py(pose.pos[0]),
+                    f2py(pose.pos[1]),
+                    f2py(pose.theta.into())
+                )
             }
             Self::Bump(bump) => {
                 let bump_str = match bump {
@@ -36,9 +62,20 @@ impl Display for SensorInfo {
     }
 }
 
+impl Sensor for SensorInfo {
+    fn current_pose(&self) -> Option<RobotPose> {
+        match self {
+            SensorInfo::Pose(robot_pose) => Some(*robot_pose),
+            SensorInfo::Bump(_) => None,
+        }
+    }
+}
+
 // From Perplexity
 fn f64_dec_exp(x: f64) -> i32 {
-    if x == 0.0 { return 0; }
+    if x == 0.0 {
+        return 0;
+    }
     x.abs().log10().floor() as i32
 }
 
@@ -73,30 +110,43 @@ impl FromStr for SensorInfo {
             Some(c) => match c {
                 '0'..='9' | '-' => Ok(Self::Pose(parse_pose(s.split_whitespace())?)),
                 '[' => Ok(Self::Bump(parse_bump(s)?)),
-                _ => Err(anyhow::anyhow!("Bad starting character: '{c}' in line '{s}'"))
-            }
+                _ => Err(anyhow::anyhow!(
+                    "Bad starting character: '{c}' in line '{s}'"
+                )),
+            },
         }
     }
 }
 
-fn parse_pose<'a, I: Iterator<Item=&'a str>>(values: I) -> anyhow::Result<RobotPose> {
+fn parse_pose<'a, I: Iterator<Item = &'a str>>(values: I) -> anyhow::Result<RobotPose> {
     let parts = values.map(|n| n.parse()).collect::<Vec<_>>();
     let mut values = vec![];
     for part in parts {
         match part {
-            Ok(value) => {values.push(value)},
-            Err(e) => {return Err(anyhow::anyhow!("{e}"))}
+            Ok(value) => values.push(value),
+            Err(e) => return Err(anyhow::anyhow!("{e}")),
         }
     }
     if values.len() != 3 {
-        return Err(anyhow::anyhow!("Need exactly 3 values, not {}", values.len()));
-    } 
-    Ok(RobotPose { pos: FloatPoint::new([values[0], values[1]]), theta: Radians::new(values[2]) })
+        return Err(anyhow::anyhow!(
+            "Need exactly 3 values, not {}",
+            values.len()
+        ));
+    }
+    Ok(RobotPose {
+        pos: FloatPoint::new([values[0], values[1]]),
+        theta: Radians::new(values[2]),
+    })
 }
 
 fn parse_bump(s: &str) -> anyhow::Result<Bump> {
-    let start = s.find('\'').ok_or_else(|| anyhow::anyhow!("No starting '"))? + 1;
-    let end = s.rfind('\'').ok_or_else(|| anyhow::anyhow!("No ending '"))?;
+    let start = s
+        .find('\'')
+        .ok_or_else(|| anyhow::anyhow!("No starting '"))?
+        + 1;
+    let end = s
+        .rfind('\'')
+        .ok_or_else(|| anyhow::anyhow!("No ending '"))?;
     let label = &s[start..end];
     match label {
         "bump_front_center" => Ok(Bump::FrontCenter),
@@ -104,8 +154,8 @@ fn parse_bump(s: &str) -> anyhow::Result<Bump> {
         "bump_front_right" => Ok(Bump::FrontRight),
         "bump_left" => Ok(Bump::Left),
         "bump_right" => Ok(Bump::Right),
-        _ => Err(anyhow::anyhow!("Did not recognize '{label}'"))
-    }    
+        _ => Err(anyhow::anyhow!("Did not recognize '{label}'")),
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
