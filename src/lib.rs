@@ -1,8 +1,7 @@
 pub mod circle_obstacles;
 
-use std::{fmt::Display, fs::File, io::{BufRead, BufReader}, str::FromStr};
-use std::f64::consts::PI;
-use particle_filter::{RobotPose, point::FloatPoint};
+use std::{f64::consts::PI, fmt::Display, fs::File, io::{BufRead, BufReader}, str::FromStr};
+use particle_filter::{FloatPoint, Radians, RobotPose};
 
 pub const CREATE3_RADIUS: f64 = 0.2032; // meters
 
@@ -21,7 +20,7 @@ impl Display for SensorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Pose(pose) => {
-                write!(f, "{} {} {}", f2py(pose.pos[0]), f2py(pose.pos[1]), f2py(pose.theta))
+                write!(f, "{} {} {}", f2py(pose.pos[0]), f2py(pose.pos[1]), f2py(pose.theta.into()))
             }
             Self::Bump(bump) => {
                 let bump_str = match bump {
@@ -92,7 +91,7 @@ fn parse_pose<'a, I: Iterator<Item=&'a str>>(values: I) -> anyhow::Result<RobotP
     if values.len() != 3 {
         return Err(anyhow::anyhow!("Need exactly 3 values, not {}", values.len()));
     } 
-    Ok(RobotPose { pos: FloatPoint::new([values[0], values[1]]), theta: values[2] })
+    Ok(RobotPose { pos: FloatPoint::new([values[0], values[1]]), theta: Radians::new(values[2]) })
 }
 
 fn parse_bump(s: &str) -> anyhow::Result<Bump> {
@@ -119,13 +118,13 @@ pub enum Bump {
 }
 
 impl Bump {
-    pub fn angle_offset(&self) -> f64 {
+    pub fn angle_offset(&self) -> Radians {
         match self {
-            Bump::FrontCenter => 0.0,
-            Bump::FrontLeft => PI/4.0,
-            Bump::FrontRight => -PI/4.0,
-            Bump::Left => PI/2.0,
-            Bump::Right => -PI/2.0,
+            Bump::FrontCenter => Radians::new(0.0),
+            Bump::FrontLeft => Radians::new(PI / 4.0),
+            Bump::FrontRight => Radians::new(-PI / 4.0),
+            Bump::Left => Radians::new(PI / 2.0),
+            Bump::Right => Radians::new(-PI / 2.0),
         }
     }
 }

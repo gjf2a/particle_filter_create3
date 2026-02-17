@@ -1,4 +1,4 @@
-use particle_filter::{Particle, RobotPose, point::{FloatPoint, Point}};
+use particle_filter::{Particle, RobotPose, FloatPoint};
 
 use crate::{CREATE3_RADIUS, SensorInfo};
 
@@ -37,15 +37,15 @@ impl Particle for CircleObstacles {
     fn pose(&self) -> RobotPose {
         self.pose
     }
-
-    fn update<N: Fn(RobotPose, &Self::SensorType) -> RobotPose>(
-        &mut self,
-        sensor_info: &Self::SensorType,
-        noise_func: N,
-    ) {
+    
+    fn set_pose(&mut self, new_pose: particle_filter::nums::RobotPose) {
+        self.pose = new_pose;
+    }
+    
+    fn sensor_update(&mut self, sensor_info: &Self::SensorType) {
         match sensor_info {
             SensorInfo::Pose(robot_pose) => {
-                self.pose = noise_func(*robot_pose, sensor_info);
+                self.pose = *robot_pose;
                 for strike in self.obstacles.iter().filter_map(|ob| ob.strike_depth(self.pose.pos)) {
                     self.total_strike_distance += strike;
                     self.num_strikes += 1;
@@ -53,9 +53,7 @@ impl Particle for CircleObstacles {
             }
             SensorInfo::Bump(bump) => {
                 let heading = self.pose.theta + bump.angle_offset();
-                let x = CREATE3_RADIUS * heading.cos();
-                let y = CREATE3_RADIUS * heading.sin();
-                self.obstacles.push(CircleObstacle { center: Point::new([x, y]), radius: CREATE3_RADIUS });
+                self.obstacles.push(CircleObstacle { center: heading.point_from(CREATE3_RADIUS), radius: CREATE3_RADIUS });
             }
         }
     }
