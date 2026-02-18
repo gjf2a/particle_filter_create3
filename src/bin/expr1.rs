@@ -1,10 +1,3 @@
-// TODO:
-//
-// Run an initial experiment here.
-// Develop a noise model using Jacob's data.
-// Determine the target odometry by doing some more measurements.
-// Then try some number of particles and see how it does.
-
 use particle_filter::ParticleFilter;
 use particle_filter_create3::{circle_obstacles::CircleObstacles, from_transcript};
 
@@ -20,7 +13,7 @@ fn main() -> anyhow::Result<()> {
             }
             particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
         }
-        let best_pose = particle_filter.current_best().0;
+        let (best_pose, best_map) = particle_filter.current_best();
         let odometry_pose = transcript
             .iter()
             .rev()
@@ -29,6 +22,7 @@ fn main() -> anyhow::Result<()> {
             .unwrap();
         println!("Odometry:      {odometry_pose}");
         println!("Best estimate: {best_pose}");
+        println!("Bounding box:  {:?}", best_map.obstacle_extremes());
     } else {
         println!("Usage: expr1 transcript_filename num_particles");
     }
