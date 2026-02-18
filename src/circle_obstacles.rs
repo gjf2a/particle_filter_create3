@@ -1,6 +1,6 @@
-use particle_filter::{Degrees, FloatPoint, Particle, RobotPose};
+use particle_filter::{Degrees, FloatPoint, ObstacleMap, RobotPose};
 
-use crate::{CREATE3_RADIUS, SensorInfo};
+use crate::{Bump, CREATE3_RADIUS};
 
 #[derive(Clone, Debug, Default)]
 pub struct CircleObstacles {
@@ -26,8 +26,8 @@ impl CircleObstacle {
     }
 }
 
-impl Particle for CircleObstacles {
-    type SensorType = SensorInfo;
+impl ObstacleMap for CircleObstacles {
+    type SensorType = Bump;
 
     fn error(&mut self, pose: &RobotPose) -> f64 {
         for strike in self
@@ -41,25 +41,31 @@ impl Particle for CircleObstacles {
         self.total_strike_distance
     }
 
-    fn mean_stdev(&self, sensor_info: &Self::SensorType) -> (f64, Degrees) {
+    fn mean_stdev(&self, sensor_info: Option<&Self::SensorType>) -> (f64, Degrees) {
+        match sensor_info {
+            None => (7e-5, Degrees::new(2e-4)),
+            Some(_) => (0.00016, Degrees::new(0.0031)),
+        }
+        /*
         match sensor_info {
             //SensorInfo::Pose(_) => (7e-4, Degrees::new(2.0)),
             SensorInfo::Pose(_) => (7e-5, Degrees::new(2e-4)),
             //SensorInfo::Bump(_) => (0.16, Degrees::new(3.1)),
             SensorInfo::Bump(_) => (0.00016, Degrees::new(0.0031)),
-        }
+        }*/
     }
 
-    fn sensor_update(&mut self, estimated_pose: &RobotPose, sensor_info: &Self::SensorType) {
-        match sensor_info {
-            SensorInfo::Pose(_) => {}
-            SensorInfo::Bump(bump) => {
-                let heading = estimated_pose.theta + bump.angle_offset();
-                self.obstacles.push(CircleObstacle {
-                    center: (CREATE3_RADIUS, heading).into(),
-                    radius: CREATE3_RADIUS,
-                });
-            }
+    fn sensor_update(
+        &mut self,
+        estimated_pose: &RobotPose,
+        sensor_info: Option<&Self::SensorType>,
+    ) {
+        if let Some(bump) = sensor_info {
+            let heading = estimated_pose.theta + bump.angle_offset();
+            self.obstacles.push(CircleObstacle {
+                center: (CREATE3_RADIUS, heading).into(),
+                radius: CREATE3_RADIUS,
+            });
         }
     }
 }

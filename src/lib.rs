@@ -1,6 +1,6 @@
 pub mod circle_obstacles;
 
-use particle_filter::{FloatPoint, Radians, RobotPose, Sensor};
+use particle_filter::{FloatPoint, Radians, RobotPose};
 use std::{
     f64::consts::PI,
     fmt::Display,
@@ -15,6 +15,22 @@ pub const CREATE3_RADIUS: f64 = 0.2032; // meters
 pub enum SensorInfo {
     Pose(RobotPose),
     Bump(Bump),
+}
+
+impl SensorInfo {
+    pub fn odometry(&self) -> Option<RobotPose> {
+        match self {
+            Self::Bump(_) => None,
+            Self::Pose(pose) => Some(*pose),
+        }
+    }
+
+    pub fn obstacles(&self) -> Option<&Bump> {
+        match self {
+            Self::Pose(_) => None,
+            Self::Bump(bump) => Some(bump),
+        }
+    }
 }
 
 pub fn from_transcript(transcript_filename: &str) -> anyhow::Result<Vec<SensorInfo>> {
@@ -44,15 +60,6 @@ impl Display for SensorInfo {
                 };
                 write!(f, "['bump_{bump_str}']")
             }
-        }
-    }
-}
-
-impl Sensor for SensorInfo {
-    fn current_pose(&self) -> Option<RobotPose> {
-        match self {
-            SensorInfo::Pose(robot_pose) => Some(*robot_pose),
-            SensorInfo::Bump(_) => None,
         }
     }
 }

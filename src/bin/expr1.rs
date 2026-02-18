@@ -5,7 +5,7 @@
 // Determine the target odometry by doing some more measurements.
 // Then try some number of particles and see how it does.
 
-use particle_filter::{ParticleFilter, Sensor};
+use particle_filter::ParticleFilter;
 use particle_filter_create3::{circle_obstacles::CircleObstacles, from_transcript};
 
 fn main() -> anyhow::Result<()> {
@@ -18,14 +18,14 @@ fn main() -> anyhow::Result<()> {
             if i % 1000 == 0 {
                 println!("{i}/{}", transcript.len());
             }
-            particle_filter.iterate(sensor_info);
+            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
         }
         let best_pose = particle_filter.current_best().0;
         let odometry_pose = transcript
             .iter()
             .rev()
-            .find(|s| s.current_pose().is_some())
-            .map(|s| s.current_pose().unwrap())
+            .find(|s| s.odometry().is_some())
+            .map(|s| s.odometry().unwrap())
             .unwrap();
         println!("Odometry:      {odometry_pose}");
         println!("Best estimate: {best_pose}");
