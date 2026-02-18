@@ -8,5 +8,3 @@ particle_filter = {git = "https://github.com/gjf2a/particle_filter"}
 bits = {git = "https://github.com/gjf2a/bits"}
 anyhow = "1.0.101"
 ryu = "1.0.23"
-rand = "0.10.0"
-rand_distr = "0.6.0"

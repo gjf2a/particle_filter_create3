@@ -1,7 +1,6 @@
 pub mod circle_obstacles;
 
-use particle_filter::{Degrees, FloatPoint, Radians, RobotPose, Sensor};
-use rand_distr::{Distribution, Normal};
+use particle_filter::{FloatPoint, Radians, RobotPose, Sensor};
 use std::{
     f64::consts::PI,
     fmt::Display,
@@ -11,19 +10,6 @@ use std::{
 };
 
 pub const CREATE3_RADIUS: f64 = 0.2032; // meters
-
-pub fn noise(pose: RobotPose, sensors: &SensorInfo) -> RobotPose {
-    let mut rng = rand::rng();
-    let (stdev_x_y, stdev_theta) = match sensors {
-        SensorInfo::Pose(_) => (7e-4, Degrees::new(2.0)),
-        SensorInfo::Bump(_) => (0.16, Degrees::new(3.1)),
-    };
-    let x_y_gaussian = Normal::new(0.0, stdev_x_y).unwrap();
-    let theta_gaussian = Normal::new(0.0, stdev_theta.into()).unwrap();
-    let x_y_noise = FloatPoint::new([x_y_gaussian.sample(&mut rng), x_y_gaussian.sample(&mut rng)]);
-    let theta_noise = Degrees::new(theta_gaussian.sample(&mut rng));
-    RobotPose { pos: (pose.pos + x_y_noise), theta: pose.theta + theta_noise.into()}
-}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {
