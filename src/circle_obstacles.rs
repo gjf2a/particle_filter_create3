@@ -1,15 +1,31 @@
-use particle_filter::{Degrees, FloatPoint, ObstacleMap, PoseEstimate, RobotPose};
+use particle_filter::{FloatPoint, Noise, ObstacleMap, PoseEstimate, Radians, RobotPose};
 
 use crate::{Bump, CREATE3_RADIUS};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Copy, Clone, Default, Debug)]
+pub struct Noises {
+    pub odom: Noise,
+    pub obst: Noise,
+}
+
+#[derive(Clone, Debug)]
 pub struct CircleObstacles {
     obstacles: Vec<CircleObstacle>,
     total_strike_distance: f64,
     num_strikes: usize,
+    noises: Noises,
 }
 
 impl CircleObstacles {
+    pub fn new(noises: Noises) -> Self {
+        Self {
+            obstacles: vec![],
+            total_strike_distance: 0.0,
+            num_strikes: 0,
+            noises,
+        }
+    }
+
     pub fn obstacle_extremes(&self) -> BoundingBox {
         self.obstacles.iter().map(|ob| ob.center).collect()
     }
@@ -36,7 +52,7 @@ impl CircleObstacle {
 pub struct BoundingBox {
     min_x: f64,
     max_x: f64,
-    min_y: f64, 
+    min_y: f64,
     max_y: f64,
 }
 
@@ -65,7 +81,7 @@ impl ObstacleMap for CircleObstacles {
     type SensorType = Bump;
 
     fn error(&mut self, estimated_pose: &PoseEstimate) -> f64 {
-        let pose: RobotPose = (*estimated_pose).into();
+        let pose: RobotPose<Radians> = (*estimated_pose).into();
         for strike in self
             .obstacles
             .iter()
@@ -77,10 +93,12 @@ impl ObstacleMap for CircleObstacles {
         self.total_strike_distance
     }
 
-    fn mean_stdev(&self, sensor_info: Option<&Self::SensorType>) -> (f64, Degrees) {
+    fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
         match sensor_info {
-            None => (7e-4, Degrees::new(2e-4)),
-            Some(_) => (0.16, Degrees::new(3.1)),
+            None => self.noises.odom,
+            Some(_) => self.noises.obst,
+            /*None => (7e-4, Degrees::new(2e-4)),
+            Some(_) => (0.16, Degrees::new(3.1)),*/
         }
         /*
         match sensor_info {
@@ -97,7 +115,7 @@ impl ObstacleMap for CircleObstacles {
         sensor_info: Option<&Self::SensorType>,
     ) {
         if let Some(bump) = sensor_info {
-            let pose: RobotPose = (*estimated_pose).into();
+            let pose: RobotPose<Radians> = (*estimated_pose).into();
             let heading = pose.theta + bump.angle_offset();
             let offset: FloatPoint = (CREATE3_RADIUS, heading).into();
             self.obstacles.push(CircleObstacle {

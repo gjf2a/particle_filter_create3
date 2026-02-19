@@ -11,8 +11,8 @@ fn main() -> anyhow::Result<()> {
         let num_particles = args[2].parse::<usize>()?;
         let noises = Noises {
             odom: Noise {
-                stdev_x_y: 7e-4,
-                stdev_angle: Degrees::new(2e-4),
+                stdev_x_y: 0.0,
+                stdev_angle: Degrees::new(0.0),
             },
             obst: Noise {
                 stdev_x_y: 0.16,

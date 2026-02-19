@@ -13,12 +13,12 @@ pub const CREATE3_RADIUS: f64 = 0.2032; // meters
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {
-    Pose(RobotPose),
+    Pose(RobotPose<Radians>),
     Bump(Bump),
 }
 
 impl SensorInfo {
-    pub fn odometry(&self) -> Option<RobotPose> {
+    pub fn odometry(&self) -> Option<RobotPose<Radians>> {
         match self {
             Self::Bump(_) => None,
             Self::Pose(pose) => Some(*pose),
@@ -111,7 +111,7 @@ impl FromStr for SensorInfo {
     }
 }
 
-fn parse_pose<'a, I: Iterator<Item = &'a str>>(values: I) -> anyhow::Result<RobotPose> {
+fn parse_pose<'a, I: Iterator<Item = &'a str>>(values: I) -> anyhow::Result<RobotPose<Radians>> {
     let parts = values.map(|n| n.parse()).collect::<Vec<_>>();
     let mut values = vec![];
     for part in parts {
