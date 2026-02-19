@@ -97,16 +97,7 @@ impl ObstacleMap for CircleObstacles {
         match sensor_info {
             None => self.noises.odom,
             Some(_) => self.noises.obst,
-            /*None => (7e-4, Degrees::new(2e-4)),
-            Some(_) => (0.16, Degrees::new(3.1)),*/
         }
-        /*
-        match sensor_info {
-            //SensorInfo::Pose(_) => (7e-4, Degrees::new(2.0)),
-            SensorInfo::Pose(_) => (7e-5, Degrees::new(2e-4)),
-            //SensorInfo::Bump(_) => (0.16, Degrees::new(3.1)),
-            SensorInfo::Bump(_) => (0.00016, Degrees::new(0.0031)),
-        }*/
     }
 
     fn sensor_update(
