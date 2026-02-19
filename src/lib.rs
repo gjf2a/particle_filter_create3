@@ -1,4 +1,5 @@
 pub mod circle_obstacles;
+pub mod drivers;
 
 use particle_filter::{FloatPoint, Radians, RobotPose};
 use std::{

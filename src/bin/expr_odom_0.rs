@@ -1,7 +1,6 @@
-use particle_filter::{Degrees, Noise, ParticleFilter};
+use particle_filter::{Degrees, Noise};
 use particle_filter_create3::{
-    circle_obstacles::{CircleObstacles, Noises},
-    from_transcript,
+    circle_obstacles::Noises, drivers::update_every_tick, from_transcript
 };
 
 fn main() -> anyhow::Result<()> {
@@ -19,24 +18,7 @@ fn main() -> anyhow::Result<()> {
                 stdev_angle: Degrees::new(3.1),
             },
         };
-        let starting_map = CircleObstacles::new(noises);
-        let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
-        for (i, sensor_info) in transcript.iter().enumerate() {
-            if i % 1000 == 0 {
-                println!("{i}/{}", transcript.len());
-            }
-            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
-        }
-        let (best_pose, best_map) = particle_filter.current_best();
-        let odometry_pose = transcript
-            .iter()
-            .rev()
-            .find(|s| s.odometry().is_some())
-            .map(|s| s.odometry().unwrap())
-            .unwrap();
-        println!("Odometry:      {odometry_pose}");
-        println!("Best estimate: {best_pose}");
-        println!("Bounding box:  {:?}", best_map.obstacle_extremes());
+        update_every_tick(noises, num_particles, &transcript);
     } else {
         println!("Usage: expr1 transcript_filename num_particles");
     }
