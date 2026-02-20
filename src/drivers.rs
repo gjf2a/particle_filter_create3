@@ -26,7 +26,7 @@ pub fn update_every_tick(noises: Noises, num_particles: usize, transcript: &Vec<
     println!("Bounding box:  {:?}", best_map.obstacle_extremes());
 }
 
-pub fn obstacle_only_updates(noises: Noises, num_particles: usize, transcript: &Vec<SensorInfo>) {
+pub fn obstacle_only_updates(noises: Noises, num_particles: usize, transcript: &Vec<SensorInfo>, print_each_update: bool) {
     let starting_map = CircleObstacles::new(noises);
     let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
     let mut raw = RobotPose::<Radians>::default();
@@ -38,12 +38,13 @@ pub fn obstacle_only_updates(noises: Noises, num_particles: usize, transcript: &
             particle_filter.iterate(Some(raw), sensor_info.obstacles());
             particle_filter.iterate(Some(raw), None);
             let (est, _) = particle_filter.current_best();
-            println!("Updating; step {i}");
-            println!("raw: {raw}");
-            println!("est: {est}");
+            if print_each_update {
+                println!("Updating; step {i}");
+                println!("raw: {raw}");
+                println!("est: {est}");
+            }
         }
     }
-    println!("Final raw: {raw}");
     particle_filter.iterate(Some(raw), None);
     let (best_pose, best_map) = particle_filter.current_best();
     let odometry_pose = transcript

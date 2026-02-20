@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
                 stdev_angle: Degrees::new(0.31),
             },
         };
-        obstacle_only_updates(noises, num_particles, &transcript);
+        obstacle_only_updates(noises, num_particles, &transcript ,true);
     } else {
         println!("Usage: expr_obst0 transcript_filename num_particles");
     }
