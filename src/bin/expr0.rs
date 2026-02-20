@@ -1,6 +1,6 @@
 use particle_filter::{Degrees, Noise};
 use particle_filter_create3::{
-    circle_obstacles::Noises, drivers::update_every_tick, from_transcript
+    Noises, drivers::update_every_tick, from_transcript
 };
 
 fn main() -> anyhow::Result<()> {

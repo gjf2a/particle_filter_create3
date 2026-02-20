@@ -1,8 +1,7 @@
 use particle_filter::{ParticleFilter, Radians, RobotPose};
 
 use crate::{
-    SensorInfo,
-    circle_obstacles::{CircleObstacles, Noises},
+    Noises, SensorInfo, circle_obstacles::CircleObstacles
 };
 
 pub fn update_every_tick(noises: Noises, num_particles: usize, transcript: &Vec<SensorInfo>) {

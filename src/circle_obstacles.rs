@@ -1,12 +1,6 @@
-use particle_filter::{FloatPoint, Noise, ObstacleMap, PoseEstimate, Radians, RobotPose};
+use particle_filter::{FloatPoint, Noise, ObstacleMap, Radians, RobotPose};
 
-use crate::{Bump, CREATE3_RADIUS};
-
-#[derive(Copy, Clone, Default, Debug)]
-pub struct Noises {
-    pub odom: Noise,
-    pub obst: Noise,
-}
+use crate::{Bump, CREATE3_RADIUS, Noises};
 
 #[derive(Clone, Debug)]
 pub struct CircleObstacles {
@@ -80,8 +74,7 @@ impl FromIterator<FloatPoint> for BoundingBox {
 impl ObstacleMap for CircleObstacles {
     type SensorType = Bump;
 
-    fn error(&mut self, estimated_pose: &PoseEstimate) -> f64 {
-        let pose: RobotPose<Radians> = (*estimated_pose).into();
+    fn error(&mut self, pose: RobotPose<Radians>) -> f64 {
         for strike in self
             .obstacles
             .iter()
@@ -102,11 +95,10 @@ impl ObstacleMap for CircleObstacles {
 
     fn sensor_update(
         &mut self,
-        estimated_pose: &PoseEstimate,
+        pose: RobotPose<Radians>,
         sensor_info: Option<&Self::SensorType>,
     ) {
         if let Some(bump) = sensor_info {
-            let pose: RobotPose<Radians> = (*estimated_pose).into();
             let heading = pose.theta + bump.angle_offset();
             let offset: FloatPoint = (CREATE3_RADIUS, heading).into();
             self.obstacles.push(CircleObstacle {

@@ -1,7 +1,8 @@
 pub mod circle_obstacles;
+pub mod grid_obstacles;
 pub mod drivers;
 
-use particle_filter::{FloatPoint, Radians, RobotPose};
+use particle_filter::{FloatPoint, Noise, Radians, RobotPose};
 use std::{
     f64::consts::PI,
     fmt::Display,
@@ -171,6 +172,12 @@ impl Bump {
             Bump::Right => Radians::new(-PI / 2.0),
         }
     }
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub struct Noises {
+    pub odom: Noise,
+    pub obst: Noise,
 }
 
 #[cfg(test)]
