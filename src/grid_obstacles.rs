@@ -14,11 +14,16 @@ pub struct GridObstacles {
 
 impl GridObstacles {
     pub fn new(square_size_m: f64, noises: Noises) -> Self {
-        Self {
+        let mut result = Self {
             grid: BitGrid::default(),
             square_size_m,
             noises,
+        };
+        let shadow = result.robot_shadow(RobotPose::default());
+        for (x, y, _) in shadow.iter() {
+            result.grid.set(x, y, false);
         }
+        result
     }
 
     fn grid_index_unchecked(&self, pos: FloatPoint) -> (i64, i64) {
@@ -62,6 +67,8 @@ impl ObstacleMap for GridObstacles {
 
     fn error(&mut self, pose: RobotPose<Radians>) -> f64 {
         let shadow = self.robot_shadow(pose);
+        println!("shadow: {:?}", shadow.x_min_x_max_y_min_y_max());
+        println!("grid:   {:?}", self.grid.x_min_x_max_y_min_y_max());
         (self.grid.overlapping_counts(&shadow).unwrap()) as f64
     }
 
@@ -108,5 +115,6 @@ mod tests {
 0000000";
         let shadow_str = format!("{shadow}");
         assert_eq!(expected, shadow_str);
+        assert!(tester.grid.matching_dimensions(&shadow));
     }
 }
