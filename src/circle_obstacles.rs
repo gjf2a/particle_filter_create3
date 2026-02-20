@@ -87,10 +87,7 @@ impl ObstacleMap for CircleObstacles {
     }
 
     fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
-        match sensor_info {
-            None => self.noises.odom,
-            Some(_) => self.noises.obst,
-        }
+        self.noises.noise(sensor_info)
     }
 
     fn sensor_update(

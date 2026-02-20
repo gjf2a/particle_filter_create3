@@ -3,7 +3,7 @@ use std::{f64::consts::PI, iter::repeat};
 use bit_grid::BitGrid;
 use particle_filter::{Angle, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose};
 
-use crate::{CREATE3_RADIUS, Noises, SensorInfo};
+use crate::{Bump, CREATE3_RADIUS, Noises};
 
 #[derive(Clone)]
 pub struct GridObstacles {
@@ -56,11 +56,11 @@ impl GridObstacles {
 
 
 impl ObstacleMap for GridObstacles {
-    type SensorType = SensorInfo;
+    type SensorType = Bump;
 
 
     fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
-        todo!()
+        self.noises.noise(sensor_info)
     }
     
     fn error(&mut self, pose: RobotPose<Radians>) -> f64 {

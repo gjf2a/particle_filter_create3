@@ -180,6 +180,15 @@ pub struct Noises {
     pub obst: Noise,
 }
 
+impl Noises {
+    fn noise(&self, sensor_info: Option<&Bump>) -> Noise {
+        match sensor_info {
+            None => self.odom,
+            Some(_) => self.obst,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
