@@ -1,7 +1,7 @@
 use std::{f64::consts::PI, iter::repeat};
 
 use bit_grid::BitGrid;
-use particle_filter::{Angle, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose};
+use particle_filter::{FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose};
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
 
@@ -21,14 +21,10 @@ impl GridObstacles {
         }
     }
 
-    fn grid_index<A: Angle>(&self, pose: &RobotPose<A>) -> Option<(i64, i64)> {
-        let x = self.to_square(pose.pos[0]);
-        let y = self.to_square(pose.pos[1]);
-        if self.grid.in_bounds(x, y) {
-            Some((x, y))
-        } else {
-            None
-        }
+    fn grid_index_unchecked(&self, pos: FloatPoint) -> (i64, i64) {
+        let x = self.to_square(pos[0]);
+        let y = self.to_square(pos[1]);
+        (x, y)
     }
 
     fn to_square(&self, value_meters: f64) -> i64 {
@@ -65,11 +61,16 @@ impl ObstacleMap for GridObstacles {
     }
 
     fn error(&mut self, pose: RobotPose<Radians>) -> f64 {
-        todo!()
+        let shadow = self.robot_shadow(pose);
+        (self.grid.overlapping_counts(&shadow).unwrap()) as f64
     }
 
     fn sensor_update(&mut self, pose: RobotPose<Radians>, sensor_info: Option<&Self::SensorType>) {
-        todo!()
+        if let Some(bump) = sensor_info {
+            let float_location = bump.bump_location(pose);
+            let (x, y) = self.grid_index_unchecked(float_location);
+            self.grid.set(x, y, true);
+        }
     }
 }
 
