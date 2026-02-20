@@ -14,16 +14,11 @@ pub struct GridObstacles {
 
 impl GridObstacles {
     pub fn new(square_size_m: f64, noises: Noises) -> Self {
-        let mut result = Self {
+        Self {
             grid: BitGrid::default(),
             square_size_m,
             noises,
-        };
-        let shadow = result.robot_shadow(RobotPose::default());
-        for (x, y, _) in shadow.iter() {
-            result.grid.set(x, y, false);
         }
-        result
     }
 
     fn grid_index_unchecked(&self, pos: FloatPoint) -> (i64, i64) {
@@ -44,7 +39,7 @@ impl GridObstacles {
         self.to_square(CREATE3_RADIUS * 4.0 / PI)
     }
 
-    pub fn robot_shadow(&self, pose: RobotPose<Radians>) -> BitGrid {
+    pub fn robot_shadow(&mut self, pose: RobotPose<Radians>) -> BitGrid {
         let grid_point = self.to_point(pose.pos);
         let min = grid_point - repeat(self.robot_grid_radius()).collect::<Point<_, _>>();
         let max = grid_point + repeat(self.robot_grid_radius()).collect::<Point<_, _>>();
@@ -52,6 +47,9 @@ impl GridObstacles {
         for p in min.point_iter(&max) {
             if p.manhattan_distance(grid_point) <= self.robot_grid_radius() {
                 shadow.set(p[0], p[1], true);
+            }
+            if self.grid.is_set(p[0], p[1]).is_none() {
+                self.grid.set(p[0], p[1], false);
             }
         }
         shadow
@@ -67,8 +65,6 @@ impl ObstacleMap for GridObstacles {
 
     fn error(&mut self, pose: RobotPose<Radians>) -> f64 {
         let shadow = self.robot_shadow(pose);
-        println!("shadow: {:?}", shadow.x_min_x_max_y_min_y_max());
-        println!("grid:   {:?}", self.grid.x_min_x_max_y_min_y_max());
         (self.grid.overlapping_counts(&shadow).unwrap()) as f64
     }
 
