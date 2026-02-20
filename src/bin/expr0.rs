@@ -1,5 +1,5 @@
 use particle_filter::{Degrees, Noise};
-use particle_filter_create3::{Noises, drivers::update_every_tick, from_transcript};
+use particle_filter_create3::{Noises, drivers::update_every_tick_circle, from_transcript};
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
@@ -16,7 +16,7 @@ fn main() -> anyhow::Result<()> {
                 stdev_angle: Degrees::new(0.0),
             },
         };
-        update_every_tick(noises, num_particles, &transcript);
+        update_every_tick_circle(noises, num_particles, &transcript);
     } else {
         println!("Usage: expr0 transcript_filename num_particles");
     }

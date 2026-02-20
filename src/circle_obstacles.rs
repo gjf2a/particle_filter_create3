@@ -1,4 +1,4 @@
-use particle_filter::{FloatPoint, Noise, ObstacleMap, Radians, RobotPose};
+use particle_filter::{BoundingBox, FloatPoint, Noise, ObstacleMap, Radians, RobotPose};
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
 
@@ -19,10 +19,6 @@ impl CircleObstacles {
             noises,
         }
     }
-
-    pub fn obstacle_extremes(&self) -> BoundingBox {
-        self.obstacles.iter().map(|ob| ob.center).collect()
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -39,35 +35,6 @@ impl CircleObstacle {
         } else {
             None
         }
-    }
-}
-
-#[derive(Default, Clone, Copy, Debug)]
-pub struct BoundingBox {
-    min_x: f64,
-    max_x: f64,
-    min_y: f64,
-    max_y: f64,
-}
-
-impl FromIterator<FloatPoint> for BoundingBox {
-    fn from_iter<T: IntoIterator<Item = FloatPoint>>(iter: T) -> Self {
-        let mut result = Self::default();
-        for point in iter {
-            if result.min_x > point[0] {
-                result.min_x = point[0];
-            }
-            if result.max_x < point[0] {
-                result.max_x = point[0];
-            }
-            if result.min_y > point[1] {
-                result.min_y = point[1];
-            }
-            if result.max_y < point[1] {
-                result.max_y = point[1];
-            }
-        }
-        result
     }
 }
 
@@ -97,5 +64,9 @@ impl ObstacleMap for CircleObstacles {
                 radius: CREATE3_RADIUS,
             });
         }
+    }
+
+    fn bounding_box(&self) -> BoundingBox {
+        self.obstacles.iter().map(|ob| ob.center).collect()
     }
 }

@@ -1,7 +1,7 @@
 use std::{f64::consts::PI, iter::repeat};
 
 use bit_grid::BitGrid;
-use particle_filter::{FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose};
+use particle_filter::{BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose};
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
 
@@ -71,6 +71,14 @@ impl ObstacleMap for GridObstacles {
             let (x, y) = self.grid_index_unchecked(float_location);
             self.grid.set(x, y, true);
         }
+    }
+
+    fn bounding_box(&self) -> BoundingBox {
+        self.grid
+            .iter()
+            .filter(|(_, _, value)| *value)
+            .map(|(x, y, _)| FloatPoint::new([x as f64, y as f64]))
+            .collect()
     }
 }
 
