@@ -1,8 +1,6 @@
 use particle_filter::{ParticleFilter, Radians, RobotPose};
 
-use crate::{
-    Noises, SensorInfo, circle_obstacles::CircleObstacles
-};
+use crate::{Noises, SensorInfo, circle_obstacles::CircleObstacles};
 
 pub fn update_every_tick(noises: Noises, num_particles: usize, transcript: &Vec<SensorInfo>) {
     let starting_map = CircleObstacles::new(noises);
@@ -25,7 +23,12 @@ pub fn update_every_tick(noises: Noises, num_particles: usize, transcript: &Vec<
     println!("Bounding box:  {:?}", best_map.obstacle_extremes());
 }
 
-pub fn obstacle_only_updates(noises: Noises, num_particles: usize, transcript: &Vec<SensorInfo>, print_each_update: bool) {
+pub fn obstacle_only_updates(
+    noises: Noises,
+    num_particles: usize,
+    transcript: &Vec<SensorInfo>,
+    print_each_update: bool,
+) {
     let starting_map = CircleObstacles::new(noises);
     let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
     let mut raw = RobotPose::<Radians>::default();

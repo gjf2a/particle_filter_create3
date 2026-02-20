@@ -1,7 +1,5 @@
 use particle_filter::{Degrees, Noise};
-use particle_filter_create3::{
-    Noises, drivers::obstacle_only_updates, from_transcript,
-};
+use particle_filter_create3::{Noises, drivers::obstacle_only_updates, from_transcript};
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
@@ -18,7 +16,7 @@ fn main() -> anyhow::Result<()> {
                 stdev_angle: Degrees::new(0.31),
             },
         };
-        obstacle_only_updates(noises, num_particles, &transcript ,true);
+        obstacle_only_updates(noises, num_particles, &transcript, true);
     } else {
         println!("Usage: expr_obst0 transcript_filename num_particles");
     }

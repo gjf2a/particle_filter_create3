@@ -14,7 +14,11 @@ pub struct GridObstacles {
 
 impl GridObstacles {
     pub fn new(square_size_m: f64, noises: Noises) -> Self {
-        Self {grid: BitGrid::default(), square_size_m, noises}
+        Self {
+            grid: BitGrid::default(),
+            square_size_m,
+            noises,
+        }
     }
 
     fn grid_index<A: Angle>(&self, pose: &RobotPose<A>) -> Option<(i64, i64)> {
@@ -26,7 +30,7 @@ impl GridObstacles {
             None
         }
     }
-    
+
     fn to_square(&self, value_meters: f64) -> i64 {
         (value_meters / self.square_size_m) as i64
     }
@@ -41,8 +45,8 @@ impl GridObstacles {
 
     pub fn robot_shadow(&self, pose: RobotPose<Radians>) -> BitGrid {
         let grid_point = self.to_point(pose.pos);
-        let min = grid_point - repeat(self.robot_grid_radius()).collect::<Point<_,_>>();       
-        let max = grid_point + repeat(self.robot_grid_radius()).collect::<Point<_,_>>();       
+        let min = grid_point - repeat(self.robot_grid_radius()).collect::<Point<_, _>>();
+        let max = grid_point + repeat(self.robot_grid_radius()).collect::<Point<_, _>>();
         let mut shadow = self.grid.zero_clone();
         for p in min.point_iter(&max) {
             if p.manhattan_distance(grid_point) <= self.robot_grid_radius() {
@@ -53,20 +57,17 @@ impl GridObstacles {
     }
 }
 
-
-
 impl ObstacleMap for GridObstacles {
     type SensorType = Bump;
-
 
     fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
         self.noises.noise(sensor_info)
     }
-    
+
     fn error(&mut self, pose: RobotPose<Radians>) -> f64 {
         todo!()
     }
-    
+
     fn sensor_update(&mut self, pose: RobotPose<Radians>, sensor_info: Option<&Self::SensorType>) {
         todo!()
     }
@@ -84,7 +85,10 @@ mod tests {
         let size = 3;
         tester.grid.set(size, size, false);
         tester.grid.set(-size, -size, false);
-        let pose = RobotPose::<Radians> {pos: FloatPoint::new([0.0, 0.0]), theta: Radians::new(0.0)};
+        let pose = RobotPose::<Radians> {
+            pos: FloatPoint::new([0.0, 0.0]),
+            theta: Radians::new(0.0),
+        };
         let shadow = tester.robot_shadow(pose);
         let expected = "0000000
 0001000
@@ -94,6 +98,6 @@ mod tests {
 0001000
 0000000";
         let shadow_str = format!("{shadow}");
-        assert_eq!(expected, shadow_str); 
+        assert_eq!(expected, shadow_str);
     }
 }

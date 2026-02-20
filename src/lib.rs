@@ -1,6 +1,6 @@
 pub mod circle_obstacles;
-pub mod grid_obstacles;
 pub mod drivers;
+pub mod grid_obstacles;
 
 use particle_filter::{FloatPoint, Noise, Radians, RobotPose};
 use std::{
@@ -171,6 +171,11 @@ impl Bump {
             Bump::Left => Radians::new(PI / 2.0),
             Bump::Right => Radians::new(-PI / 2.0),
         }
+    }
+
+    pub fn bump_location(&self, pose: RobotPose<Radians>) -> FloatPoint {
+        let heading = pose.theta + self.angle_offset();
+        pose.pos + (CREATE3_RADIUS, heading).into()
     }
 }
 

@@ -1,7 +1,5 @@
 use particle_filter::{Degrees, Noise};
-use particle_filter_create3::{
-    Noises, drivers::obstacle_only_updates, from_transcript
-};
+use particle_filter_create3::{Noises, drivers::obstacle_only_updates, from_transcript};
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();

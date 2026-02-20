@@ -90,16 +90,10 @@ impl ObstacleMap for CircleObstacles {
         self.noises.noise(sensor_info)
     }
 
-    fn sensor_update(
-        &mut self,
-        pose: RobotPose<Radians>,
-        sensor_info: Option<&Self::SensorType>,
-    ) {
+    fn sensor_update(&mut self, pose: RobotPose<Radians>, sensor_info: Option<&Self::SensorType>) {
         if let Some(bump) = sensor_info {
-            let heading = pose.theta + bump.angle_offset();
-            let offset: FloatPoint = (CREATE3_RADIUS, heading).into();
             self.obstacles.push(CircleObstacle {
-                center: pose.pos + offset,
+                center: bump.bump_location(pose),
                 radius: CREATE3_RADIUS,
             });
         }
