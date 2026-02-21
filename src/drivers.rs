@@ -37,6 +37,12 @@ pub fn update_every_tick_grid(
     let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
     update_every_tick(&mut particle_filter, transcript);
     final_report(transcript, &particle_filter);
+    let obstacle_count = particle_filter.particles().map(|(_,m)| m.num_obstacles() as f64).collect::<Stats<f64>>();
+    println!(
+        "Mean obstacles: {:.2} (+/- {:.2})",
+        obstacle_count.mean(),
+        obstacle_count.stdev()
+    );
 }
 
 pub fn obstacle_only_updates_grid(

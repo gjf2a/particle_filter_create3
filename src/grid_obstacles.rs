@@ -58,6 +58,10 @@ impl GridObstacles {
         }
         shadow
     }
+
+    pub fn num_obstacles(&self) -> u64 {
+        self.grid.count_bits_on()
+    }
 }
 
 impl ObstacleMap for GridObstacles {
@@ -116,5 +120,13 @@ mod tests {
         let shadow_str = format!("{shadow}");
         assert_eq!(expected, shadow_str);
         assert!(tester.grid.matching_dimensions(&shadow));
+
+        tester.grid.set(0, 0, true);
+        tester.grid.set(-2, -1, true);
+        tester.grid.set(-2, 0, true);
+
+        let intersected = (tester.grid.overlapping_counts(&shadow)).unwrap();
+        assert_eq!(intersected, 2);
+        
     }
 }
