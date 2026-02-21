@@ -31,6 +31,10 @@ impl GridObstacles {
         (value_meters / self.square_size_m) as i64
     }
 
+    fn to_meters(&self, value_squares: i64) -> f64 {
+        value_squares as f64 * self.square_size_m
+    }
+
     fn to_point(&self, fp: FloatPoint) -> Point<i64, 2> {
         fp.iter().map(|f| self.to_square(f)).collect()
     }
@@ -80,7 +84,7 @@ impl ObstacleMap for GridObstacles {
         self.grid
             .iter()
             .filter(|(_, _, value)| *value)
-            .map(|(x, y, _)| FloatPoint::new([x as f64, y as f64]))
+            .map(|(x, y, _)| FloatPoint::new([self.to_meters(x), self.to_meters(y)]))
             .collect()
     }
 }

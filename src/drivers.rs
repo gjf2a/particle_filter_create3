@@ -1,4 +1,4 @@
-use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose};
+use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose, stats::Stats};
 
 use crate::{
     Bump, Noises, SensorInfo, circle_obstacles::CircleObstacles, grid_obstacles::GridObstacles,
@@ -106,4 +106,17 @@ pub fn final_report<M: ObstacleMap>(
     println!("Odometry:      {odometry_pose}");
     println!("Best estimate: {best_pose}");
     println!("Bounding box:  {:?}", best_map.bounding_box());
+    let error_stats = error_stats(particle_filter);
+    println!(
+        "Mean error: {:.2} (+/- {:.2})",
+        error_stats.mean(),
+        error_stats.stdev()
+    );
+}
+
+pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
+    particle_filter
+        .particles()
+        .map(|(pose, map)| map.clone().error((*pose).into()))
+        .collect()
 }
