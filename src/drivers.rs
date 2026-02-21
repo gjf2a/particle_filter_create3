@@ -37,7 +37,10 @@ pub fn update_every_tick_grid(
     let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
     update_every_tick(&mut particle_filter, transcript);
     final_report(transcript, &particle_filter);
-    let obstacle_count = particle_filter.particles().map(|(_,m)| m.num_obstacles() as f64).collect::<Stats<f64>>();
+    let obstacle_count = particle_filter
+        .particles()
+        .map(|(_, m, _)| m.num_obstacles() as f64)
+        .collect::<Stats<f64>>();
     println!(
         "Mean obstacles: {:.2} (+/- {:.2})",
         obstacle_count.mean(),
@@ -83,7 +86,7 @@ pub fn obstacle_only_updates<M: ObstacleMap<SensorType = Bump>>(
         if sensor_info.obstacles().is_some() {
             particle_filter.iterate(Some(raw), sensor_info.obstacles());
             particle_filter.iterate(Some(raw), None);
-            let (est, _) = particle_filter.current_best();
+            let (est, _, _) = particle_filter.current_best();
             if print_each_update {
                 println!("Updating; step {i}");
                 println!("raw: {raw}");
@@ -107,7 +110,7 @@ pub fn final_report<M: ObstacleMap>(
     transcript: &Vec<SensorInfo>,
     particle_filter: &ParticleFilter<M>,
 ) {
-    let (best_pose, best_map) = particle_filter.current_best();
+    let (best_pose, best_map, _) = particle_filter.current_best();
     let odometry_pose = final_pose(transcript);
     println!("Odometry:      {odometry_pose}");
     println!("Best estimate: {best_pose}");
@@ -123,6 +126,6 @@ pub fn final_report<M: ObstacleMap>(
 pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
     particle_filter
         .particles()
-        .map(|(pose, map)| map.clone().error((*pose).into()))
+        .map(|(pose, map, _)| map.clone().error((*pose).into()))
         .collect()
 }

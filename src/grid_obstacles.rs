@@ -80,6 +80,11 @@ impl ObstacleMap for GridObstacles {
         if let Some(bump) = sensor_info {
             let float_location = bump.bump_location(pose);
             let (x, y) = self.grid_index_unchecked(float_location);
+            println!(
+                "robot: {pose} ({}) bump: {float_location} {:?}",
+                self.to_point(pose.pos),
+                (x, y)
+            );
             self.grid.set(x, y, true);
         }
     }
@@ -127,6 +132,5 @@ mod tests {
 
         let intersected = (tester.grid.overlapping_counts(&shadow)).unwrap();
         assert_eq!(intersected, 2);
-        
     }
 }
