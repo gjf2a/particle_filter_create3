@@ -91,7 +91,11 @@ impl ObstacleMap for GridObstacles {
         if let Some(bump) = sensor_info {
             let float_location = bump.bump_location(pose);
             let (x, y) = self.grid_index_unchecked(float_location);
+            let expanding = self.grid.is_set(x, y).is_none();
             self.grid.set(x, y, true);
+            if expanding {
+                self.grid.enlarge(2);
+            }
         }
     }
 
