@@ -8,6 +8,7 @@ use crate::{Bump, CREATE3_RADIUS, Noises};
 #[derive(Clone)]
 pub struct GridObstacles {
     grid: BitGrid,
+    num_collisions: u64,
     square_size_m: f64,
     noises: Noises,
 }
@@ -18,7 +19,16 @@ impl GridObstacles {
             grid: BitGrid::default(),
             square_size_m,
             noises,
+            num_collisions: 0,
         }
+    }
+
+    pub fn width(&self) -> i64 {
+        self.grid.width()
+    }
+
+    pub fn height(&self) -> i64 {
+        self.grid.height()
     }
 
     fn grid_index_unchecked(&self, pos: FloatPoint) -> (i64, i64) {
@@ -73,28 +83,21 @@ impl ObstacleMap for GridObstacles {
 
     fn error(&mut self, pose: RobotPose<Radians>) -> f64 {
         let shadow = self.robot_shadow(pose);
-        (self.grid.overlapping_counts(&shadow).unwrap()) as f64
+        self.num_collisions += self.grid.overlapping_counts(&shadow).unwrap();
+        self.num_collisions as f64
     }
 
     fn sensor_update(&mut self, pose: RobotPose<Radians>, sensor_info: Option<&Self::SensorType>) {
         if let Some(bump) = sensor_info {
             let float_location = bump.bump_location(pose);
             let (x, y) = self.grid_index_unchecked(float_location);
-            println!(
-                "robot: {pose} ({}) bump: {float_location} {:?}",
-                self.to_point(pose.pos),
-                (x, y)
-            );
             self.grid.set(x, y, true);
         }
     }
 
     fn bounding_box(&self) -> BoundingBox {
-        self.grid
-            .iter()
-            .filter(|(_, _, value)| *value)
-            .map(|(x, y, _)| FloatPoint::new([self.to_meters(x), self.to_meters(y)]))
-            .collect()
+        let (min_x, max_x, min_y, max_y) = self.grid.x_min_x_max_y_min_y_max();
+        [(min_x, min_y), (max_x, max_y)].iter().map(|(x, y)| FloatPoint::new([self.to_meters(*x), self.to_meters(*y)])).collect()
     }
 }
 
