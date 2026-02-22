@@ -97,7 +97,10 @@ impl ObstacleMap for GridObstacles {
 
     fn bounding_box(&self) -> BoundingBox {
         let (min_x, max_x, min_y, max_y) = self.grid.x_min_x_max_y_min_y_max();
-        [(min_x, min_y), (max_x, max_y)].iter().map(|(x, y)| FloatPoint::new([self.to_meters(*x), self.to_meters(*y)])).collect()
+        [(min_x, min_y), (max_x, max_y)]
+            .iter()
+            .map(|(x, y)| FloatPoint::new([self.to_meters(*x), self.to_meters(*y)]))
+            .collect()
     }
 }
 

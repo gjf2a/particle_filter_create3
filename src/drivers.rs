@@ -42,10 +42,14 @@ pub fn update_every_tick_grid(
         .map(|(_, m, _)| m.num_obstacles() as f64)
         .collect::<Stats<f64>>();
     println!(
-        "Mean obstacles: {:.2} (+/- {:.2})",
+        "Mean obstacles: [{}, {}] {:.2} (+/- {:.2})",
+        obstacle_count.min(),
+        obstacle_count.max(),
         obstacle_count.mean(),
         obstacle_count.stdev()
     );
+    let (_, best_map, _) = particle_filter.current_best();
+    println!("grid pixels: {}", best_map.height() * best_map.width());
 }
 
 pub fn obstacle_only_updates_grid(

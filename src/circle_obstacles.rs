@@ -5,6 +5,7 @@ use crate::{Bump, CREATE3_RADIUS, Noises};
 #[derive(Clone, Debug)]
 pub struct CircleObstacles {
     obstacles: Vec<CircleObstacle>,
+    estimate_bounding_box: BoundingBox,
     total_strike_distance: f64,
     num_strikes: usize,
     noises: Noises,
@@ -14,6 +15,7 @@ impl CircleObstacles {
     pub fn new(noises: Noises) -> Self {
         Self {
             obstacles: vec![],
+            estimate_bounding_box: BoundingBox::default(),
             total_strike_distance: 0.0,
             num_strikes: 0,
             noises,
@@ -64,9 +66,11 @@ impl ObstacleMap for CircleObstacles {
                 radius: CREATE3_RADIUS,
             });
         }
+        self.estimate_bounding_box.observe(pose.pos[0], pose.pos[1]);
     }
 
     fn bounding_box(&self) -> BoundingBox {
-        self.obstacles.iter().map(|ob| ob.center).collect()
+        //self.obstacles.iter().map(|ob| ob.center).collect()
+        self.estimate_bounding_box
     }
 }
