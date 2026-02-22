@@ -1,7 +1,7 @@
 use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose, stats::Stats};
 
 use crate::{
-    Bump, Noises, SensorInfo, circle_obstacles::CircleObstacles, grid_obstacles::GridObstacles,
+    Bump, Noises, SensorInfo, circle_obstacles::CircleObstacles, grid_obstacles::GridObstacles, grid_circle_obstacles::GridCircleObstacles,
 };
 
 pub fn update_every_tick_circle(
@@ -50,6 +50,18 @@ pub fn update_every_tick_grid(
     );
     let (_, best_map, _) = particle_filter.current_best();
     println!("grid pixels: {}", best_map.height() * best_map.width());
+}
+
+pub fn update_every_tick_grid_circle(
+    square_size_m: f64,
+    noises: Noises,
+    num_particles: usize,
+    transcript: &Vec<SensorInfo>,
+) {
+    let starting_map = GridCircleObstacles::new(square_size_m, noises);
+    let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
+    update_every_tick(&mut particle_filter, transcript);
+    final_report(transcript, &particle_filter);
 }
 
 pub fn obstacle_only_updates_grid(
