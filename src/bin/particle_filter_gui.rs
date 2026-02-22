@@ -1,8 +1,5 @@
 use eframe::egui::{self, Context, Pos2, Vec2, Visuals};
 
-const FPS: f32 = 20.0;
-const FRAME_INTERVAL: f32 = 1.0 / FPS;
-
 pub fn main() {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -35,6 +32,7 @@ struct MainApp {
     map_choice: MapChoice,
     num_particles: String,
     m_per_square: String,
+    obstacles_only: bool,
 }
 
 impl MainApp {
@@ -43,6 +41,7 @@ impl MainApp {
             m_per_square: "0.1".to_string(),
             map_choice: MapChoice::Grid,
             num_particles: "100".to_string(),
+            obstacles_only: false,
         }
     }
 
@@ -57,28 +56,23 @@ impl eframe::App for MainApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Particle Filters");
             ui.vertical(|ui| {
+                ui.checkbox(&mut self.obstacles_only, "Obstacles Only");
                 ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Particles");
-                            ui.text_edit_singleline(&mut self.num_particles);
-                        });
+                    ui.label("Particles");
+                    ui.text_edit_singleline(&mut self.num_particles);
+                });
 
-                        ui.horizontal(|ui| {
-                            ui.label("Meters per square");
-                            ui.text_edit_singleline(&mut self.m_per_square);
-                        });
+                ui.horizontal(|ui| {
+                    ui.label("Meters per square");
+                    ui.text_edit_singleline(&mut self.m_per_square);
+                });
 
-                        ui.vertical(|ui| {
-                            ui.radio_value(&mut self.map_choice, MapChoice::Grid, "Grid");
-                            ui.radio_value(&mut self.map_choice, MapChoice::Circle, "Circle");
-                        });
-                    });
+                ui.vertical(|ui| {
+                    ui.radio_value(&mut self.map_choice, MapChoice::Grid, "Grid");
+                    ui.radio_value(&mut self.map_choice, MapChoice::Circle, "Circle");
                 });
                 if ui.button("Start").clicked() {}
             });
-
-            ctx.request_repaint_after_secs(FRAME_INTERVAL);
         });
     }
 }
