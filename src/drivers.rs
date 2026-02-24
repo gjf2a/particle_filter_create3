@@ -1,7 +1,8 @@
 use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose, stats::Stats};
 
 use crate::{
-    Bump, Noises, SensorInfo, circle_obstacles::CircleObstacles, grid_obstacles::GridObstacles, grid_circle_obstacles::GridCircleObstacles,
+    Bump, Noises, SensorInfo, circle_obstacles::CircleObstacles,
+    grid_circle_obstacles::GridCircleObstacles, grid_obstacles::GridObstacles,
 };
 
 pub fn update_every_tick_circle(

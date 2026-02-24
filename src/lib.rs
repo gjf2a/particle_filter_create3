@@ -1,7 +1,7 @@
 pub mod circle_obstacles;
 pub mod drivers;
-pub mod grid_obstacles;
 pub mod grid_circle_obstacles;
+pub mod grid_obstacles;
 
 use particle_filter::{FloatPoint, Noise, Radians, RobotPose};
 use std::{
@@ -145,11 +145,15 @@ fn parse_bump(s: &str) -> anyhow::Result<Bump> {
         .ok_or_else(|| anyhow::anyhow!("No ending '"))?;
     let label = &s[start..end];
     match label {
-        "bump_front_center" => Ok(Bump::FrontCenter),
-        "bump_front_left" => Ok(Bump::FrontLeft),
-        "bump_front_right" => Ok(Bump::FrontRight),
-        "bump_left" => Ok(Bump::Left),
-        "bump_right" => Ok(Bump::Right),
+        "bump_front_center" | "cliff_front_center" | "cliff_front_left', 'cliff_front_right" => {
+            Ok(Bump::FrontCenter)
+        }
+        "bump_front_left" | "cliff_front_left" | "cliff_side_left', 'cliff_front_left" => {
+            Ok(Bump::FrontLeft)
+        }
+        "bump_front_right" | "cliff_front_right" => Ok(Bump::FrontRight),
+        "bump_left" | "cliff_side_left" => Ok(Bump::Left),
+        "bump_right" | "cliff_side_right" => Ok(Bump::Right),
         _ => Err(anyhow::anyhow!("Did not recognize '{label}'")),
     }
 }
