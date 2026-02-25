@@ -3,8 +3,9 @@ use particle_filter_create3::{Noises, drivers::obstacle_only_updates_circle, odo
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
-    if args.len() == 3 {
+    if args.len() >= 3 {
         let transcript = Transcript::from_transcript(args[1].as_str())?;
+        let print_each_update = args.len() == 3;
         let num_particles = args[2].parse::<usize>()?;
         let noises = Noises {
             odom: Noise {
@@ -16,7 +17,7 @@ fn main() -> anyhow::Result<()> {
                 stdev_angle: Degrees::new(0.31),
             },
         };
-        obstacle_only_updates_circle(noises, num_particles, &transcript, true);
+        obstacle_only_updates_circle(noises, num_particles, &transcript, print_each_update);
     } else {
         println!("Usage: expr_obst0 transcript_filename num_particles");
     }

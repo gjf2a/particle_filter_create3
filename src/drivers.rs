@@ -132,6 +132,16 @@ pub fn final_report<M: ObstacleMap>(
         error_stats.mean(),
         error_stats.stdev()
     );
+    println!("Min, Max, Median error: {}, {}, {}", error_stats.min(), error_stats.median(), error_stats.max());
+
+    let range_stats = range_stats(particle_filter);
+println!(
+        "Mean range to best: {:.2} (+/- {:.2})",
+        range_stats.mean(),
+        range_stats.stdev()
+    );
+    println!("Min, Max, Median range: {}, {}, {}", range_stats.min(), range_stats.median(), range_stats.max());
+
 }
 
 pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
@@ -139,4 +149,14 @@ pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats
         .particles()
         .map(|(pose, map, _)| map.clone().error((*pose).into()))
         .collect()
+}
+
+pub fn range_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
+    particle_filter
+    .particles()
+    .map(|(pose, _, _)| {
+        let pose: RobotPose<Radians> = (*pose).into();
+        pose.pos.euclidean_distance(particle_filter.current_best().0.pos)
+    })
+    .collect()
 }
