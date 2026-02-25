@@ -121,7 +121,10 @@ pub fn final_report<M: ObstacleMap>(
     let (best_pose, best_map, _) = particle_filter.current_best();
     let odometry_pose = transcript.final_pose();
     println!("Odometry:      {odometry_pose}");
+    println!("Actual:        {}", transcript.actual());
+    println!("Error:         {}", transcript.error_robot_stop());
     println!("Best estimate: {best_pose}");
+    println!("Error:         {}", transcript.error_to(best_pose.pos));
     println!("Bounding box:  {:?}", best_map.bounding_box());
     let error_stats = error_stats(particle_filter);
     println!(

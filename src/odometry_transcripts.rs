@@ -27,6 +27,10 @@ impl Transcript {
         })
     }
 
+    pub fn actual(&self) -> FloatPoint {
+        self.actual_ending_point
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = SensorInfo> {
         self.steps.iter().copied()
     }
