@@ -2,6 +2,7 @@ pub mod circle_obstacles;
 pub mod drivers;
 pub mod grid_circle_obstacles;
 pub mod grid_obstacles;
+pub mod odometry_transcripts;
 
 use particle_filter::{FloatPoint, Noise, Radians, RobotPose};
 use std::{

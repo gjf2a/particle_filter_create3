@@ -1,14 +1,14 @@
 use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose, stats::Stats};
 
 use crate::{
-    Bump, Noises, SensorInfo, circle_obstacles::CircleObstacles,
-    grid_circle_obstacles::GridCircleObstacles, grid_obstacles::GridObstacles,
+    Bump, Noises, circle_obstacles::CircleObstacles,
+    grid_circle_obstacles::GridCircleObstacles, grid_obstacles::GridObstacles, odometry_transcripts::Transcript,
 };
 
 pub fn update_every_tick_circle(
     noises: Noises,
     num_particles: usize,
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
 ) {
     let starting_map = CircleObstacles::new(noises);
     let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
@@ -19,7 +19,7 @@ pub fn update_every_tick_circle(
 pub fn obstacle_only_updates_circle(
     noises: Noises,
     num_particles: usize,
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
     print_each_update: bool,
 ) {
     let starting_map = CircleObstacles::new(noises);
@@ -32,7 +32,7 @@ pub fn update_every_tick_grid(
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
 ) {
     let starting_map = GridObstacles::new(square_size_m, noises);
     let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
@@ -57,7 +57,7 @@ pub fn update_every_tick_grid_circle(
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
 ) {
     let starting_map = GridCircleObstacles::new(square_size_m, noises);
     let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
@@ -69,7 +69,7 @@ pub fn obstacle_only_updates_grid(
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
     print_each_update: bool,
 ) {
     let starting_map = GridObstacles::new(square_size_m, noises);
@@ -80,7 +80,7 @@ pub fn obstacle_only_updates_grid(
 
 pub fn update_every_tick<M: ObstacleMap<SensorType = Bump>>(
     particle_filter: &mut ParticleFilter<M>,
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
 ) {
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
@@ -92,7 +92,7 @@ pub fn update_every_tick<M: ObstacleMap<SensorType = Bump>>(
 
 pub fn obstacle_only_updates<M: ObstacleMap<SensorType = Bump>>(
     particle_filter: &mut ParticleFilter<M>,
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
     print_each_update: bool,
 ) {
     let mut raw = RobotPose::<Radians>::default();
@@ -114,21 +114,12 @@ pub fn obstacle_only_updates<M: ObstacleMap<SensorType = Bump>>(
     particle_filter.iterate(Some(raw), None);
 }
 
-pub fn final_pose(transcript: &Vec<SensorInfo>) -> RobotPose<Radians> {
-    transcript
-        .iter()
-        .rev()
-        .find(|s| s.odometry().is_some())
-        .map(|s| s.odometry().unwrap())
-        .unwrap()
-}
-
 pub fn final_report<M: ObstacleMap>(
-    transcript: &Vec<SensorInfo>,
+    transcript: &Transcript,
     particle_filter: &ParticleFilter<M>,
 ) {
     let (best_pose, best_map, _) = particle_filter.current_best();
-    let odometry_pose = final_pose(transcript);
+    let odometry_pose = transcript.final_pose();
     println!("Odometry:      {odometry_pose}");
     println!("Best estimate: {best_pose}");
     println!("Bounding box:  {:?}", best_map.bounding_box());
