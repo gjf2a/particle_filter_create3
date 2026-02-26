@@ -1,15 +1,12 @@
-pub mod circle_obstacles;
 pub mod drivers;
-pub mod grid_circle_obstacles;
 pub mod grid_obstacles;
 pub mod odometry_transcripts;
+pub mod landmark_map;
 
 use particle_filter::{FloatPoint, Noise, Radians, RobotPose};
 use std::{
     f64::consts::PI,
     fmt::Display,
-    fs::File,
-    io::{BufRead, BufReader},
     str::FromStr,
 };
 
@@ -35,11 +32,6 @@ impl SensorInfo {
             Self::Bump(bump) => Some(bump),
         }
     }
-}
-
-pub fn from_transcript(transcript_filename: &str) -> anyhow::Result<Vec<SensorInfo>> {
-    let file = BufReader::new(File::open(transcript_filename)?);
-    file.lines().map(|line| Ok(line?.parse()?)).collect()
 }
 
 impl Display for SensorInfo {
@@ -200,25 +192,4 @@ impl Noises {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::{
-        fs::File,
-        io::{BufRead, BufReader},
-    };
 
-    use super::*;
-
-    #[test]
-    fn test_transcript() {
-        let transcript = from_transcript("odometry_2026-02-12_10-49-47.out").unwrap();
-        let file = BufReader::new(File::open("odometry_2026-02-12_10-49-47.out").unwrap());
-        for (i, line) in file.lines().enumerate() {
-            let line = line.unwrap();
-            let line_info = line.parse::<SensorInfo>().unwrap();
-            assert_eq!(line_info, transcript[i]);
-            let transcript_line = format!("{}", transcript[i]);
-            assert_eq!(transcript_line, line);
-        }
-    }
-}

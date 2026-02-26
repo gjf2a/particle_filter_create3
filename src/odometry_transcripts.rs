@@ -93,3 +93,26 @@ pub fn parse_ending_point(actual_filename: &str) -> anyhow::Result<FloatPoint> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs::File,
+        io::{BufRead, BufReader},
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_transcript() {
+        let transcript = from_transcript("odometry_2026-02-12_10-49-47.out").unwrap();
+        let file = BufReader::new(File::open("odometry_2026-02-12_10-49-47.out").unwrap());
+        for (i, line) in file.lines().enumerate() {
+            let line = line.unwrap();
+            let line_info = line.parse::<SensorInfo>().unwrap();
+            assert_eq!(line_info, transcript[i]);
+            let transcript_line = format!("{}", transcript[i]);
+            assert_eq!(transcript_line, line);
+        }
+    }
+}

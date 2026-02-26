@@ -1,32 +1,8 @@
 use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose, stats::Stats};
 
 use crate::{
-    Bump, Noises, circle_obstacles::CircleObstacles,
-    grid_circle_obstacles::GridCircleObstacles, grid_obstacles::GridObstacles, odometry_transcripts::Transcript,
+    Bump, Noises, grid_obstacles::GridObstacles, odometry_transcripts::Transcript,
 };
-
-pub fn update_every_tick_circle(
-    noises: Noises,
-    num_particles: usize,
-    transcript: &Transcript,
-) {
-    let starting_map = CircleObstacles::new(noises);
-    let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
-    update_every_tick(&mut particle_filter, transcript);
-    final_report(transcript, &particle_filter);
-}
-
-pub fn obstacle_only_updates_circle(
-    noises: Noises,
-    num_particles: usize,
-    transcript: &Transcript,
-    print_each_update: bool,
-) {
-    let starting_map = CircleObstacles::new(noises);
-    let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
-    obstacle_only_updates(&mut particle_filter, transcript, print_each_update);
-    final_report(transcript, &particle_filter);
-}
 
 pub fn update_every_tick_grid(
     square_size_m: f64,
@@ -51,18 +27,6 @@ pub fn update_every_tick_grid(
     );
     let (_, best_map, _) = particle_filter.current_best();
     println!("grid pixels: {}", best_map.height() * best_map.width());
-}
-
-pub fn update_every_tick_grid_circle(
-    square_size_m: f64,
-    noises: Noises,
-    num_particles: usize,
-    transcript: &Transcript,
-) {
-    let starting_map = GridCircleObstacles::new(square_size_m, noises);
-    let mut particle_filter = ParticleFilter::new(num_particles, &starting_map);
-    update_every_tick(&mut particle_filter, transcript);
-    final_report(transcript, &particle_filter);
 }
 
 pub fn obstacle_only_updates_grid(
@@ -147,7 +111,7 @@ println!(
 pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
     particle_filter
         .particles()
-        .map(|(pose, map, _)| map.clone().error((*pose).into()))
+        .map(|(_, map, _)| map.clone().error())
         .collect()
 }
 

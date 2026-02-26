@@ -1,5 +1,5 @@
 use eframe::egui::{self, Context, Pos2, Ui, Vec2, Visuals};
-use particle_filter_create3::from_transcript;
+use particle_filter_create3::odometry_transcripts::Transcript;
 use std::env;
 
 pub fn main() {
@@ -8,7 +8,7 @@ pub fn main() {
         println!("Usage: particle_filter_gui fileneme");
         return;
     }
-    let transcript = from_transcript(args[1].as_str()).unwrap();
+    let transcript = Transcript::from_transcript(args[1].as_str()).unwrap();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
