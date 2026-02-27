@@ -1,14 +1,9 @@
 pub mod drivers;
 pub mod grid_obstacles;
 pub mod odometry_transcripts;
-pub mod landmark_map;
 
 use particle_filter::{FloatPoint, Noise, Radians, RobotPose};
-use std::{
-    f64::consts::PI,
-    fmt::Display,
-    str::FromStr,
-};
+use std::{f64::consts::PI, fmt::Display, str::FromStr};
 
 pub const CREATE3_RADIUS: f64 = 0.2032; // meters
 
@@ -177,7 +172,7 @@ impl Bump {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq)]
 pub struct Noises {
     pub odom: Noise,
     pub obst: Noise,
@@ -191,5 +186,3 @@ impl Noises {
         }
     }
 }
-
-

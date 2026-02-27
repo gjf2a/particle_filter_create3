@@ -1,5 +1,7 @@
 use particle_filter::{Degrees, Noise};
-use particle_filter_create3::{Noises, drivers::update_every_tick_grid, odometry_transcripts::Transcript};
+use particle_filter_create3::{
+    Noises, drivers::update_every_tick_grid, odometry_transcripts::Transcript,
+};
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();

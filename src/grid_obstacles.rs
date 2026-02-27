@@ -5,7 +5,7 @@ use particle_filter::{BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radian
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct GridObstacles {
     obstacles: BitGrid,
     spaces: BitGrid,
@@ -55,7 +55,11 @@ impl GridObstacles {
 
     pub fn robot_shadow(&mut self, pose: RobotPose<Radians>) -> BitGrid {
         let mut shadow = self.obstacles.zero_clone();
-        Self::draw_shadow_on(self.robot_grid_radius(), self.to_point(pose.pos), &mut shadow);
+        Self::draw_shadow_on(
+            self.robot_grid_radius(),
+            self.to_point(pose.pos),
+            &mut shadow,
+        );
         shadow
     }
 
@@ -76,13 +80,14 @@ impl GridObstacles {
 
 impl ObstacleMap for GridObstacles {
     type SensorType = Bump;
+    type ErrorType = u64;
 
     fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
         self.noises.noise(sensor_info)
     }
 
-    fn error(&self) -> f64 {
-        self.obstacles.overlapping_counts(&self.spaces).unwrap() as f64
+    fn error(&self) -> u64 {
+        self.obstacles.overlapping_counts(&self.spaces).unwrap()
     }
 
     fn sensor_update(&mut self, pose: RobotPose<Radians>, sensor_info: Option<&Self::SensorType>) {
@@ -93,7 +98,11 @@ impl ObstacleMap for GridObstacles {
                 self.obstacles.set(x, y, true);
             }
             None => {
-                Self::draw_shadow_on(self.robot_grid_radius(), self.to_point(pose.pos), &mut self.spaces);
+                Self::draw_shadow_on(
+                    self.robot_grid_radius(),
+                    self.to_point(pose.pos),
+                    &mut self.spaces,
+                );
             }
         }
         self.obstacles.match_sizes(&mut self.spaces);

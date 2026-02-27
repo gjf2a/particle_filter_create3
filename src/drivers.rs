@@ -1,8 +1,6 @@
 use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose, stats::Stats};
 
-use crate::{
-    Bump, Noises, grid_obstacles::GridObstacles, odometry_transcripts::Transcript,
-};
+use crate::{Bump, Noises, grid_obstacles::GridObstacles, odometry_transcripts::Transcript};
 
 pub fn update_every_tick_grid(
     square_size_m: f64,
@@ -16,7 +14,7 @@ pub fn update_every_tick_grid(
     final_report(transcript, &particle_filter);
     let obstacle_count = particle_filter
         .particles()
-        .map(|(_, m, _)| m.num_obstacles() as f64)
+        .map(|p| p.map().num_obstacles() as f64)
         .collect::<Stats<f64>>();
     println!(
         "Mean obstacles: [{}, {}] {:.2} (+/- {:.2})",
@@ -25,7 +23,8 @@ pub fn update_every_tick_grid(
         obstacle_count.mean(),
         obstacle_count.stdev()
     );
-    let (_, best_map, _) = particle_filter.current_best();
+    let best_particle = particle_filter.current_best();
+    let best_map = best_particle.map();
     println!("grid pixels: {}", best_map.height() * best_map.width());
 }
 
@@ -67,7 +66,7 @@ pub fn obstacle_only_updates<M: ObstacleMap<SensorType = Bump>>(
         if sensor_info.obstacles().is_some() {
             particle_filter.iterate(Some(raw), sensor_info.obstacles());
             particle_filter.iterate(Some(raw), None);
-            let (est, _, _) = particle_filter.current_best();
+            let est = particle_filter.current_best().estimated_pose();
             if print_each_update {
                 println!("Updating; step {i}");
                 println!("raw: {raw}");
@@ -78,11 +77,10 @@ pub fn obstacle_only_updates<M: ObstacleMap<SensorType = Bump>>(
     particle_filter.iterate(Some(raw), None);
 }
 
-pub fn final_report<M: ObstacleMap>(
-    transcript: &Transcript,
-    particle_filter: &ParticleFilter<M>,
-) {
-    let (best_pose, best_map, _) = particle_filter.current_best();
+pub fn final_report(transcript: &Transcript, particle_filter: &ParticleFilter<GridObstacles>) {
+    let best_particle = particle_filter.current_best();
+    let best_pose = best_particle.estimated_pose();
+    let best_map = best_particle.map();
     let odometry_pose = transcript.final_pose();
     println!("Odometry:      {odometry_pose}");
     println!("Actual:        {}", transcript.actual());
@@ -96,31 +94,42 @@ pub fn final_report<M: ObstacleMap>(
         error_stats.mean(),
         error_stats.stdev()
     );
-    println!("Min, Max, Median error: {}, {}, {}", error_stats.min(), error_stats.median(), error_stats.max());
+    println!(
+        "Min, Max, Median error: {}, {}, {}",
+        error_stats.min(),
+        error_stats.median(),
+        error_stats.max()
+    );
 
     let range_stats = range_stats(particle_filter);
-println!(
+    println!(
         "Mean range to best: {:.2} (+/- {:.2})",
         range_stats.mean(),
         range_stats.stdev()
     );
-    println!("Min, Max, Median range: {}, {}, {}", range_stats.min(), range_stats.median(), range_stats.max());
-
+    println!(
+        "Min, Max, Median range: {}, {}, {}",
+        range_stats.min(),
+        range_stats.median(),
+        range_stats.max()
+    );
 }
-
+/* 
 pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
-    particle_filter
-        .particles()
-        .map(|(_, map, _)| map.clone().error())
-        .collect()
+    particle_filter.particles().map(|p| p.error() as f64).collect()
+}
+*/
+
+pub fn error_stats(particle_filter: &ParticleFilter<GridObstacles>) -> Stats<f64> {
+    particle_filter.particles().map(|p| p.error() as f64).collect()
 }
 
 pub fn range_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
     particle_filter
-    .particles()
-    .map(|(pose, _, _)| {
-        let pose: RobotPose<Radians> = (*pose).into();
-        pose.pos.euclidean_distance(particle_filter.current_best().0.pos)
-    })
-    .collect()
+        .particles()
+        .map(|p| {
+            p.estimated_pose().pos
+                .euclidean_distance(particle_filter.current_best().estimated_pose().pos)
+        })
+        .collect()
 }
