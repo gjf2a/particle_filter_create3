@@ -14,6 +14,8 @@ pub struct GridObstacles {
     spaces: BitGrid,
     square_size_m: f64,
     noises: Noises,
+    brand_new: bool,
+    all_space_overlaps: bool,
 }
 
 impl GridObstacles {
@@ -23,6 +25,8 @@ impl GridObstacles {
             spaces: BitGrid::default(),
             square_size_m,
             noises,
+            brand_new: true,
+            all_space_overlaps: true,
         }
     }
 
@@ -58,7 +62,7 @@ impl GridObstacles {
 
     pub fn robot_shadow(&mut self, pose: RobotPose<Radians>) -> BitGrid {
         let mut shadow = self.obstacles.zero_clone();
-        Self::draw_shadow_on(
+        Self::draw_overlapping_shadow_on(
             self.robot_grid_radius(),
             self.to_point(pose.pos),
             &mut shadow,
@@ -66,18 +70,36 @@ impl GridObstacles {
         shadow
     }
 
-    pub fn draw_shadow_on(robot_grid_radius: i64, grid_point: Point<i64, 2>, grid: &mut BitGrid) {
+    pub fn draw_overlapping_shadow_on(robot_grid_radius: i64, grid_point: Point<i64, 2>, grid: &mut BitGrid) -> bool {
         let min = grid_point - repeat(robot_grid_radius).collect::<Point<_, _>>();
         let max = grid_point + repeat(robot_grid_radius).collect::<Point<_, _>>();
+        let mut overlapping = false;
         for p in min.point_iter(&max) {
             if p.manhattan_distance(grid_point) <= robot_grid_radius {
+                if let Some(already_set) = grid.is_set(p[0], p[1]) {
+                    overlapping |= already_set;
+                }
                 grid.set(p[0], p[1], true);
             }
         }
+        overlapping
     }
 
     pub fn num_obstacles(&self) -> u64 {
         self.obstacles.count_bits_on()
+    }
+
+    pub fn obstacle_space_independent(&self) -> bool {
+        let overlaps = self.obstacles.overlaps(&self.spaces).unwrap();
+        let osi = overlaps.ones().all(|(x, y)| {
+            self.spaces
+                .manhattan_neighbors(x, y)
+                .any(|(_, _, is_on)| !is_on)
+        });
+        /*if !osi {
+            println!("space-obstacle clash!");
+        }*/
+        osi
     }
 }
 
@@ -96,11 +118,16 @@ impl SensorNoiseMap for GridObstacles {
                 self.obstacles.set(x, y, true);
             }
             None => {
-                Self::draw_shadow_on(
+                let overlap = Self::draw_overlapping_shadow_on(
                     self.robot_grid_radius(),
                     self.to_point(pose.pos),
                     &mut self.spaces,
                 );
+                self.all_space_overlaps = self.all_space_overlaps && (self.brand_new || overlap);
+                if !self.all_space_overlaps {
+                    println!("space gap!");
+                }
+                self.brand_new = false;
             }
         }
         self.obstacles.match_sizes(&mut self.spaces);
@@ -125,12 +152,7 @@ impl ObstacleMap for GridObstacles {
 
 impl CoherenceMap for GridObstacles {
     fn is_coherent(&self) -> bool {
-        let overlaps = self.obstacles.overlaps(&self.spaces).unwrap();
-        overlaps.ones().all(|(x, y)| {
-            self.spaces
-                .manhattan_neighbors(x, y)
-                .any(|(_, _, is_on)| !is_on)
-        })
+        self.all_space_overlaps && self.obstacle_space_independent()
     }
 }
 
