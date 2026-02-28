@@ -1,6 +1,54 @@
-use particle_filter::{ObstacleMap, ParticleFilter, Radians, RobotPose, stats::Stats};
+use particle_filter::{
+    FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose, coherent::CParticleFilter,
+    stats::Stats,
+};
+use std::cmp::Ordering;
 
 use crate::{Bump, Noises, grid_obstacles::GridObstacles, odometry_transcripts::Transcript};
+
+pub fn coherent_driver(
+    square_size_m: f64,
+    noises: Noises,
+    num_particles: usize,
+    transcript: &Transcript,
+) {
+    let starting_map = GridObstacles::new(square_size_m, noises);
+    let mut particle_filter = CParticleFilter::new(num_particles, &starting_map);
+    for (i, sensor_info) in transcript.iter().enumerate() {
+        if i % 1000 == 0 {
+            println!("{i}/{}", transcript.len());
+        }
+        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+        if particle_filter.failed() {
+            println!("Failed at iteration {i}");
+            return;
+        }
+    }
+
+    let odometry_pose = transcript.final_pose();
+    println!("Odometry:      {odometry_pose}");
+    println!("Actual:        {}", transcript.actual());
+    println!("Error:         {}", transcript.error_robot_stop());
+    let (closest, dist) = closest_estimate(&transcript.actual(), &particle_filter);
+    println!("Estimate:      {closest} ({dist:.2})");
+    println!("Error:         {}", transcript.error_to(closest.pos));
+}
+
+pub fn closest_estimate(
+    actual: &FloatPoint,
+    particles: &CParticleFilter<GridObstacles>,
+) -> (RobotPose<Radians>, f64) {
+    particles
+        .particles()
+        .map(|p| {
+            (
+                p.estimated_pose(),
+                p.estimated_pose().pos.euclidean_distance(*actual),
+            )
+        })
+        .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .unwrap()
+}
 
 pub fn update_every_tick_grid(
     square_size_m: f64,
@@ -114,21 +162,25 @@ pub fn final_report(transcript: &Transcript, particle_filter: &ParticleFilter<Gr
         range_stats.max()
     );
 }
-/* 
+/*
 pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
     particle_filter.particles().map(|p| p.error() as f64).collect()
 }
 */
 
 pub fn error_stats(particle_filter: &ParticleFilter<GridObstacles>) -> Stats<f64> {
-    particle_filter.particles().map(|p| p.error() as f64).collect()
+    particle_filter
+        .particles()
+        .map(|p| p.error() as f64)
+        .collect()
 }
 
 pub fn range_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
     particle_filter
         .particles()
         .map(|p| {
-            p.estimated_pose().pos
+            p.estimated_pose()
+                .pos
                 .euclidean_distance(particle_filter.current_best().estimated_pose().pos)
         })
         .collect()

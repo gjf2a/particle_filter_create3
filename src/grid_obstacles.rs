@@ -1,7 +1,10 @@
 use std::{f64::consts::PI, iter::repeat};
 
 use bit_grid::BitGrid;
-use particle_filter::{BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose};
+use particle_filter::{
+    BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose, SensorNoiseMap,
+    coherent::CoherenceMap,
+};
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
 
@@ -78,16 +81,11 @@ impl GridObstacles {
     }
 }
 
-impl ObstacleMap for GridObstacles {
+impl SensorNoiseMap for GridObstacles {
     type SensorType = Bump;
-    type ErrorType = u64;
 
     fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
         self.noises.noise(sensor_info)
-    }
-
-    fn error(&self) -> u64 {
-        self.obstacles.overlapping_counts(&self.spaces).unwrap()
     }
 
     fn sensor_update(&mut self, pose: RobotPose<Radians>, sensor_info: Option<&Self::SensorType>) {
@@ -107,6 +105,14 @@ impl ObstacleMap for GridObstacles {
         }
         self.obstacles.match_sizes(&mut self.spaces);
     }
+}
+
+impl ObstacleMap for GridObstacles {
+    type ErrorType = u64;
+
+    fn error(&self) -> u64 {
+        self.obstacles.overlapping_counts(&self.spaces).unwrap()
+    }
 
     fn bounding_box(&self) -> BoundingBox {
         let (min_x, max_x, min_y, max_y) = self.obstacles.x_min_x_max_y_min_y_max();
@@ -114,6 +120,17 @@ impl ObstacleMap for GridObstacles {
             .iter()
             .map(|(x, y)| FloatPoint::new([self.to_meters(*x), self.to_meters(*y)]))
             .collect()
+    }
+}
+
+impl CoherenceMap for GridObstacles {
+    fn is_coherent(&self) -> bool {
+        let overlaps = self.obstacles.overlaps(&self.spaces).unwrap();
+        overlaps.ones().all(|(x, y)| {
+            self.spaces
+                .manhattan_neighbors(x, y)
+                .any(|(_, _, is_on)| !is_on)
+        })
     }
 }
 
