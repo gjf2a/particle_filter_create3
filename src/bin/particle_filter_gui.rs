@@ -1,7 +1,10 @@
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Context, Pos2, Ui, Vec2, Visuals};
 use particle_filter::{Degrees, Noise, consistent::ConsistentParticleFilter};
-use particle_filter_create3::{Noises, drivers::consistent_expr, grid_obstacles::GridObstacles, odometry_transcripts::Transcript};
+use particle_filter_create3::{
+    Noises, drivers::consistent_expr, grid_obstacles::GridObstacles,
+    odometry_transcripts::Transcript,
+};
 use std::{env, sync::Arc};
 
 pub fn main() {
@@ -128,23 +131,22 @@ impl MainApp {
         let transcript = self.transcript.clone();
         let which_one = self.map_choice;
         let progress = self.progress.clone();
-        std::thread::spawn(move || {
-            match which_one {
-                MapChoice::FixedGrid => todo!(),
-                MapChoice::GrowingGrid => {
-                    let starting_map = GridObstacles::new(square_size_m, noises);
-                    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
-                    for (i, sensor_info) in transcript.iter().enumerate() {
-                        progress.store(Some(format!("{i}/{}", transcript.len())));
-                        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
-                        if particle_filter.failed() {
-                            progress.store(Some(format!("Failed at iteration {i}")));
-                            break;
-                        }
+        std::thread::spawn(move || match which_one {
+            MapChoice::FixedGrid => todo!(),
+            MapChoice::GrowingGrid => {
+                let starting_map = GridObstacles::new(square_size_m, noises);
+                let mut particle_filter =
+                    ConsistentParticleFilter::new(num_particles, &starting_map);
+                for (i, sensor_info) in transcript.iter().enumerate() {
+                    progress.store(Some(format!("{i}/{}", transcript.len())));
+                    particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+                    if particle_filter.failed() {
+                        progress.store(Some(format!("Failed at iteration {i}")));
+                        break;
                     }
-
-                    todo!("Display the results on the GUI somehow");
                 }
+
+                todo!("Display the results on the GUI somehow");
             }
         });
         Ok(())

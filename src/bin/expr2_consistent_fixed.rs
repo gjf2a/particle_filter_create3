@@ -20,9 +20,17 @@ fn main() -> anyhow::Result<()> {
                 stdev_angle: Degrees::new(0.31),
             },
         };
-        fixed_consistent_driver(square_size_m, noises, num_particles, radius_border_multiplier, &transcript);
+        fixed_consistent_driver(
+            square_size_m,
+            noises,
+            num_particles,
+            radius_border_multiplier,
+            &transcript,
+        );
     } else {
-        println!("Usage: expr1_consistent transcript_filename num_particles square_size_m radius_border_multiplier");
+        println!(
+            "Usage: expr1_consistent transcript_filename num_particles square_size_m radius_border_multiplier"
+        );
     }
     Ok(())
 }

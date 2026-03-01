@@ -6,7 +6,10 @@ use particle_filter::{
     consistent::{ConsistentMap, StatCollector},
 };
 
-use crate::{Bump, CREATE3_RADIUS, Noises, fixed_grid_obstacles::{FixedGridObstaclesStats, Inconsistency}};
+use crate::{
+    Bump, CREATE3_RADIUS, Noises,
+    fixed_grid_obstacles::{FixedGridObstaclesStats, Inconsistency},
+};
 
 #[derive(Clone, PartialEq)]
 pub struct GridObstacles {

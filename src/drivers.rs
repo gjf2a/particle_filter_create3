@@ -7,7 +7,9 @@ use std::cmp::Ordering;
 
 use crate::{
     Bump, Noises,
-    fixed_grid_obstacles::{FixedGridObstacles, FixedGridObstaclesStats, GridBounds, Inconsistency, RobotShadows},
+    fixed_grid_obstacles::{
+        FixedGridObstacles, FixedGridObstaclesStats, GridBounds, Inconsistency, RobotShadows,
+    },
     grid_obstacles::GridObstacles,
     odometry_transcripts::Transcript,
 };
@@ -19,7 +21,11 @@ pub fn fixed_consistent_driver(
     radius_border_multiplier: f64,
     transcript: &Transcript,
 ) {
-    let bounds = GridBounds::new(radius_border_multiplier, &transcript.bounding_box(), square_size_m);
+    let bounds = GridBounds::new(
+        radius_border_multiplier,
+        &transcript.bounding_box(),
+        square_size_m,
+    );
     let shadows = RobotShadows::new(&bounds);
     let starting_map = FixedGridObstacles::new(bounds, noises, &shadows);
     let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
@@ -59,7 +65,10 @@ pub fn consistent_expr(
     particle_filter
 }
 
-pub fn consistent_report<M: ConsistentMap>(transcript: &Transcript, particle_filter: &ConsistentParticleFilter<M>) {
+pub fn consistent_report<M: ConsistentMap>(
+    transcript: &Transcript,
+    particle_filter: &ConsistentParticleFilter<M>,
+) {
     if !particle_filter.failed() {
         let odometry_pose = transcript.final_pose();
         println!("Actual:        {}", transcript.actual());
@@ -81,7 +90,10 @@ pub fn inconsistent_report(stats: &FixedGridObstaclesStats, failed: bool) {
         "Total inconsistencies:            {}",
         inconsistencies.total_count()
     );
-    println!("Total obstacle/space issues: {}", stats.total_for(&Inconsistency::ObstacleSpaceOverlap));
+    println!(
+        "Total obstacle/space issues: {}",
+        stats.total_for(&Inconsistency::ObstacleSpaceOverlap)
+    );
     println!(
         "Total discontinuity issues:  {}",
         stats.total_for(&Inconsistency::SeparatedSpaces)

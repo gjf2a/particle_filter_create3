@@ -1,6 +1,8 @@
 use particle_filter::{Degrees, Noise};
 use particle_filter_create3::{
-    Noises, drivers::{consistent_expr, consistent_report, inconsistent_report}, odometry_transcripts::Transcript,
+    Noises,
+    drivers::{consistent_expr, consistent_report, inconsistent_report},
+    odometry_transcripts::Transcript,
 };
 
 fn main() -> anyhow::Result<()> {
