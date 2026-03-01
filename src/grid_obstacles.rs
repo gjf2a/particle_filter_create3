@@ -1,17 +1,17 @@
 use std::{f64::consts::PI, iter::repeat};
 
-use bit_grid::BitGrid;
+use bit_grid::{BitGrid, GrowingBitGrid};
 use particle_filter::{
     BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose, SensorNoiseMap,
-    coherent::CoherenceMap,
+    consistent::ConsistentMap,
 };
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
 
 #[derive(Clone, PartialEq)]
 pub struct GridObstacles {
-    obstacles: BitGrid,
-    spaces: BitGrid,
+    obstacles: GrowingBitGrid,
+    spaces: GrowingBitGrid,
     square_size_m: f64,
     noises: Noises,
     brand_new: bool,
@@ -21,8 +21,8 @@ pub struct GridObstacles {
 impl GridObstacles {
     pub fn new(square_size_m: f64, noises: Noises) -> Self {
         Self {
-            obstacles: BitGrid::default(),
-            spaces: BitGrid::default(),
+            obstacles: GrowingBitGrid::default(),
+            spaces: GrowingBitGrid::default(),
             square_size_m,
             noises,
             brand_new: true,
@@ -60,7 +60,7 @@ impl GridObstacles {
         self.to_square(CREATE3_RADIUS * 4.0 / PI)
     }
 
-    pub fn robot_shadow(&mut self, pose: RobotPose<Radians>) -> BitGrid {
+    pub fn robot_shadow(&mut self, pose: RobotPose<Radians>) -> GrowingBitGrid {
         let mut shadow = self.obstacles.zero_clone();
         Self::draw_overlapping_shadow_on(
             self.robot_grid_radius(),
@@ -70,15 +70,17 @@ impl GridObstacles {
         shadow
     }
 
-    pub fn draw_overlapping_shadow_on(robot_grid_radius: i64, grid_point: Point<i64, 2>, grid: &mut BitGrid) -> bool {
+    pub fn draw_overlapping_shadow_on(
+        robot_grid_radius: i64,
+        grid_point: Point<i64, 2>,
+        grid: &mut GrowingBitGrid,
+    ) -> bool {
         let min = grid_point - repeat(robot_grid_radius).collect::<Point<_, _>>();
         let max = grid_point + repeat(robot_grid_radius).collect::<Point<_, _>>();
         let mut overlapping = false;
         for p in min.point_iter(&max) {
             if p.manhattan_distance(grid_point) <= robot_grid_radius {
-                if let Some(already_set) = grid.is_set(p[0], p[1]) {
-                    overlapping |= already_set;
-                }
+                overlapping |= grid.is_set(p[0], p[1]);
                 grid.set(p[0], p[1], true);
             }
         }
@@ -90,17 +92,25 @@ impl GridObstacles {
     }
 
     pub fn obstacle_space_independent(&self) -> bool {
-        let overlaps = self.obstacles.overlaps(&self.spaces).unwrap();
+        let overlaps = self.obstacles.intersection(&self.spaces).unwrap();
         let osi = overlaps.ones().all(|(x, y)| {
             self.spaces
                 .manhattan_neighbors(x, y)
                 .any(|(_, _, is_on)| !is_on)
         });
-        /*if !osi {
-            println!("space-obstacle clash!");
-        }*/
         osi
     }
+    /*
+    pub fn frontier_spaces(&self) -> impl Iterator<Item = (i64,i64)> {
+        let spaces_with_obstacles = self.spaces.union(&self.obstacles).unwrap();
+        let frontier_spaces = spaces_with_obstacles.ones_touching_zeros().filter(|(x, y)| !self.obstacles.is_set(*x, *y));
+        todo!();
+    }
+
+    pub fn filled_in(&self) -> bool {
+        self.frontier_spaces().count() == 0
+    }
+    */
 }
 
 impl SensorNoiseMap for GridObstacles {
@@ -150,14 +160,15 @@ impl ObstacleMap for GridObstacles {
     }
 }
 
-impl CoherenceMap for GridObstacles {
-    fn is_coherent(&self) -> bool {
+impl ConsistentMap for GridObstacles {
+    fn is_consistent(&self) -> bool {
         self.all_space_overlaps && self.obstacle_space_independent()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use bit_grid::BitGrid;
     use particle_filter::{FloatPoint, Radians, RobotPose};
 
     use crate::{Noises, grid_obstacles::GridObstacles};

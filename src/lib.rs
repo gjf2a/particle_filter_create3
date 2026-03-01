@@ -1,4 +1,5 @@
 pub mod drivers;
+pub mod fixed_grid_obstacles;
 pub mod grid_obstacles;
 pub mod odometry_transcripts;
 

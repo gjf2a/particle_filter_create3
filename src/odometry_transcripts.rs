@@ -3,7 +3,9 @@ use std::{
     io::{BufRead, BufReader},
 };
 
-use particle_filter::{FloatPoint, Radians, RobotPose};
+use particle_filter::{BoundingBox, FloatPoint, Radians, RobotPose};
+
+const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
 
 use crate::SensorInfo;
 
@@ -54,6 +56,31 @@ impl Transcript {
 
     pub fn error_robot_stop(&self) -> FloatPoint {
         self.error_to(self.final_pose().pos)
+    }
+
+    pub fn total_distance_recorded(&self) -> f64 {
+        let mut prev = FloatPoint::default();
+        let mut total = 0.0;
+        for info in self.steps.iter() {
+            if let SensorInfo::Pose(robot_pose) = info {
+                total += robot_pose.pos.euclidean_distance(prev);
+                prev = robot_pose.pos;
+            }
+        }
+        total
+    }
+
+    pub fn total_time_seconds(&self) -> f64 {
+        self.steps.iter().filter(|s| s.odometry().is_some()).count() as f64
+            * CREATE3_ODOMETRY_UPDATE_INTERVAL
+    }
+
+    pub fn bounding_box(&self) -> BoundingBox {
+        self.steps
+            .iter()
+            .filter_map(|s| s.odometry())
+            .map(|p| p.pos)
+            .collect()
     }
 }
 
