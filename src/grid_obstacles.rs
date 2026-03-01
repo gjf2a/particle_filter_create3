@@ -180,7 +180,7 @@ pub struct GridObstaclesStats {
 }
 
 impl GridObstaclesStats {
-    pub fn total_space(&self) -> usize {
+    pub fn total_discontinuous(&self) -> usize {
         self.space_breaks.total_count()
     }
 
@@ -189,7 +189,7 @@ impl GridObstaclesStats {
     }
 
     pub fn total(&self) -> usize {
-        self.total_space() + self.total_collision()
+        self.total_discontinuous() + self.total_collision()
     }
 
     pub fn by_iteration(&self) -> HashHistogram<usize, usize> {

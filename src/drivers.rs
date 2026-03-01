@@ -82,12 +82,16 @@ pub fn consistent_driver(
 
     let stats = particle_filter.stats();
     let inconsistencies = stats.by_iteration();
-    println!("Iterations with inconsistencies: {}", inconsistencies.len());
+    println!("Iterations with inconsistencies:  {}", inconsistencies.len());
     println!(
-        "Total inconsistencies:           {}",
+        "Total inconsistencies:            {}",
         inconsistencies.total_count()
     );
-    println!("{inconsistencies}");
+    println!("Total obstacle/space issues: {}", stats.total_collision());
+    println!("Total discontinuity issues:  {}", stats.total_discontinuous());
+    if particle_filter.failed() {
+        println!("{inconsistencies}");
+    }
 }
 
 pub fn closest_estimate<M: ConsistentMap>(
