@@ -1,11 +1,17 @@
 use enum_iterator::all;
 use particle_filter::{
     FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose,
-    consistent::{ConsistentMap, ConsistentParticleFilter}, stats::Stats,
+    consistent::{ConsistentMap, ConsistentParticleFilter},
+    stats::Stats,
 };
 use std::cmp::Ordering;
 
-use crate::{Bump, Noises, fixed_grid_obstacles::{FixedGridObstacles, GridBounds, Inconsistency, RobotShadows}, grid_obstacles::GridObstacles, odometry_transcripts::Transcript};
+use crate::{
+    Bump, Noises,
+    fixed_grid_obstacles::{FixedGridObstacles, GridBounds, Inconsistency, RobotShadows},
+    grid_obstacles::GridObstacles,
+    odometry_transcripts::Transcript,
+};
 
 pub fn fixed_consistent_driver(
     square_size_m: f64,

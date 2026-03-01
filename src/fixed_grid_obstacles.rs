@@ -107,7 +107,11 @@ impl RobotShadows {
                         if shadow.in_bounds(p[0], p[1]) {
                             shadow.set(p[0], p[1], true);
                         } else {
-                            panic!("Out of bounds: {p}; {limit}; {min} {max} {} {}", bounds.width(), bounds.height());
+                            panic!(
+                                "Out of bounds: {p}; {limit}; {min} {max} {} {}",
+                                bounds.width(),
+                                bounds.height()
+                            );
                         }
                     }
                 }
@@ -138,11 +142,7 @@ pub struct FixedGridObstacles<'a> {
 }
 
 impl<'a> FixedGridObstacles<'a> {
-    pub fn new(
-        bounds: GridBounds,
-        noises: Noises,
-        shadows: &'a RobotShadows,
-    ) -> Self {
+    pub fn new(bounds: GridBounds, noises: Noises, shadows: &'a RobotShadows) -> Self {
         Self {
             obstacles: bounds.blank_grid(),
             spaces: bounds.blank_grid(),
@@ -239,7 +239,11 @@ impl FixedGridObstaclesStats {
 
 impl Default for FixedGridObstaclesStats {
     fn default() -> Self {
-        Self { stats: all::<Inconsistency>().map(|inc| (inc, HashHistogram::default())).collect() }
+        Self {
+            stats: all::<Inconsistency>()
+                .map(|inc| (inc, HashHistogram::default()))
+                .collect(),
+        }
     }
 }
 
