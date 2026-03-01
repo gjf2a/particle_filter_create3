@@ -29,17 +29,18 @@ pub struct GridBounds {
 }
 
 impl GridBounds {
-    pub fn new(bounds: &BoundingBox, square_size_m: f64) -> Self {
-        let width = (bounds.width() / square_size_m + CREATE3_RADIUS * 2.0) as u64;
-        let height = (bounds.height() / square_size_m + CREATE3_RADIUS * 2.0) as u64;
+    pub fn new(radius_border_multiplier: f64, bounds: &BoundingBox, square_size_m: f64) -> Self {
+        let border = radius_border_multiplier * CREATE3_RADIUS;
+        let width = (bounds.width() / square_size_m + border * 2.0) as u64;
+        let height = (bounds.height() / square_size_m + border * 2.0) as u64;
         Self {
             width,
             height,
             square_size_m,
-            min_x: bounds.min_x() - CREATE3_RADIUS,
-            min_y: bounds.min_y() - CREATE3_RADIUS,
-            max_x: bounds.max_x() + CREATE3_RADIUS,
-            max_y: bounds.max_y() + CREATE3_RADIUS,
+            min_x: bounds.min_x() - border,
+            min_y: bounds.min_y() - border,
+            max_x: bounds.max_x() + border,
+            max_y: bounds.max_y() + border,
         }
     }
 
@@ -228,12 +229,30 @@ impl<'a> ConsistentMap for FixedGridObstacles<'a> {
 
 #[derive(Clone)]
 pub struct FixedGridObstaclesStats {
-    stats: HashMap<Inconsistency, HashHistogram<usize, usize>>,
+    pub stats: HashMap<Inconsistency, HashHistogram<usize, usize>>,
 }
 
 impl FixedGridObstaclesStats {
     pub fn stats_for(&self, key: &Inconsistency) -> &HashHistogram<usize, usize> {
         self.stats.get(key).unwrap()
+    }
+
+    pub fn total_for(&self, key: &Inconsistency) -> usize {
+        self.stats_for(key).total_count()
+    }
+
+    pub fn total(&self) -> usize {
+        all::<Inconsistency>().map(|inc| self.total_for(&inc)).sum()
+    }
+
+    pub fn by_iteration(&self) -> HashHistogram<usize, usize> {
+        let mut result = HashHistogram::new();
+        for counts in self.stats.values() {
+            for (key, count) in counts.iter() {
+                result.bump_by(key, *count);
+            }
+        }
+        result
     }
 }
 
