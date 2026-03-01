@@ -1,13 +1,12 @@
 use std::{f64::consts::PI, iter::repeat};
 
 use bit_grid::{BitGrid, GrowingBitGrid};
-use hash_histogram::HashHistogram;
 use particle_filter::{
     BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose, SensorNoiseMap,
     consistent::{ConsistentMap, StatCollector},
 };
 
-use crate::{Bump, CREATE3_RADIUS, Noises};
+use crate::{Bump, CREATE3_RADIUS, Noises, fixed_grid_obstacles::{FixedGridObstaclesStats, Inconsistency}};
 
 #[derive(Clone, PartialEq)]
 pub struct GridObstacles {
@@ -105,6 +104,16 @@ impl GridObstacles {
         });
         osi
     }
+
+    pub fn inconsistency(&self) -> Option<Inconsistency> {
+        if !self.space_contiguous {
+            Some(Inconsistency::SeparatedSpaces)
+        } else if !self.obstacle_space_independent() {
+            Some(Inconsistency::ObstacleSpaceOverlap)
+        } else {
+            None
+        }
+    }
     /*
     pub fn frontier_spaces(&self) -> impl Iterator<Item = (i64,i64)> {
         let spaces_with_obstacles = self.spaces.union(&self.obstacles).unwrap();
@@ -166,48 +175,17 @@ impl ObstacleMap for GridObstacles {
 }
 
 impl ConsistentMap for GridObstacles {
-    type StatType = GridObstaclesStats;
+    type StatType = FixedGridObstaclesStats;
 
     fn is_consistent(&self) -> bool {
         self.space_contiguous && self.obstacle_space_independent()
     }
 }
 
-#[derive(Clone, Default)]
-pub struct GridObstaclesStats {
-    space_breaks: HashHistogram<usize, usize>,
-    obstacle_space_collisions: HashHistogram<usize, usize>,
-}
-
-impl GridObstaclesStats {
-    pub fn total_discontinuous(&self) -> usize {
-        self.space_breaks.total_count()
-    }
-
-    pub fn total_collision(&self) -> usize {
-        self.obstacle_space_collisions.total_count()
-    }
-
-    pub fn total(&self) -> usize {
-        self.total_discontinuous() + self.total_collision()
-    }
-
-    pub fn by_iteration(&self) -> HashHistogram<usize, usize> {
-        let mut result = self.obstacle_space_collisions.clone();
-        for (key, count) in self.obstacle_space_collisions.iter() {
-            result.bump_by(key, *count);
-        }
-        result
-    }
-}
-
-impl StatCollector<GridObstacles> for GridObstaclesStats {
+impl StatCollector<GridObstacles> for FixedGridObstaclesStats {
     fn gather_data_from(&mut self, iteration: usize, particle: &GridObstacles) {
-        if !particle.obstacle_space_independent() {
-            self.obstacle_space_collisions.bump(&iteration);
-        }
-        if !particle.space_contiguous() {
-            self.space_breaks.bump(&iteration);
+        if let Some(inconsistency) = particle.inconsistency() {
+            self.stats.get_mut(&inconsistency).unwrap().bump(&iteration);
         }
     }
 }
