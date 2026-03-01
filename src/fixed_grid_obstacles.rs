@@ -1,0 +1,213 @@
+use std::{f64::consts::PI, iter::repeat};
+
+use bit_grid::{BitGrid, FixedBitGrid};
+use particle_filter::{
+    BoundingBox, FloatPoint, GridPoint, Noise, Point, Radians, RobotPose, SensorNoiseMap,
+    consistent::ConsistentMap,
+};
+
+use crate::{Bump, CREATE3_RADIUS, Noises};
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum Inconsistency {
+    ObstacleSpaceOverlap,
+    SeparatedSpaces,
+    OffMap,
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct GridBounds {
+    width: u64,
+    height: u64,
+    square_size_m: f64,
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+}
+
+impl GridBounds {
+    pub fn new(bounds: &BoundingBox, square_size_m: f64) -> Self {
+        let width = (bounds.width() / square_size_m + CREATE3_RADIUS * 2.0) as u64;
+        let height = (bounds.height() / square_size_m + CREATE3_RADIUS * 2.0) as u64;
+        Self {
+            width,
+            height,
+            square_size_m,
+            min_x: bounds.min_x() - CREATE3_RADIUS,
+            min_y: bounds.min_y() - CREATE3_RADIUS,
+            max_x: bounds.max_x() + CREATE3_RADIUS,
+            max_y: bounds.max_y() + CREATE3_RADIUS,
+        }
+    }
+
+    pub fn in_bounds(&self, point: FloatPoint) -> bool {
+        self.min_x <= point[0]
+            && point[0] <= self.max_x
+            && self.min_y <= point[1]
+            && point[1] <= self.max_y
+    }
+
+    pub fn meters_to_square_size(&self, value_meters: f64) -> u64 {
+        (value_meters / self.square_size_m) as u64
+    }
+
+    pub fn robot_grid_radius(&self) -> u64 {
+        self.meters_to_square_size(CREATE3_RADIUS * 4.0 / PI)
+    }
+
+    pub fn grid_location(&self, p: FloatPoint) -> GridPoint {
+        p.iter()
+            .zip(self.min_meters().iter())
+            .map(|(n, min)| self.meters_to_square_size(n - min))
+            .collect()
+    }
+
+    pub fn blank_grid(&self) -> FixedBitGrid {
+        FixedBitGrid::new(self.width, self.height)
+    }
+
+    pub fn width(&self) -> u64 {
+        self.width
+    }
+
+    pub fn height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn max_point(&self) -> GridPoint {
+        GridPoint::new([self.width - 1, self.height - 1])
+    }
+
+    pub fn min_meters(&self) -> FloatPoint {
+        FloatPoint::new([self.min_x, self.min_y])
+    }
+}
+
+pub struct RobotShadows {
+    shadows: Vec<Vec<FixedBitGrid>>,
+}
+
+impl RobotShadows {
+    pub fn new(bounds: &GridBounds) -> Self {
+        let limit = bounds.max_point();
+        let mut result = Self { shadows: vec![] };
+        for x in 0..bounds.width() {
+            let mut row = vec![];
+            for y in 0..bounds.height() {
+                let mut shadow = bounds.blank_grid();
+                let grid_point = GridPoint::new([x, y]);
+                let min = grid_point - repeat(bounds.robot_grid_radius()).collect::<Point<_, _>>();
+                let max = grid_point + repeat(bounds.robot_grid_radius()).collect::<Point<_, _>>();
+                let max = max.element_max(&limit);
+                for p in min.point_iter(&max) {
+                    if p.manhattan_distance(grid_point) <= bounds.robot_grid_radius() {
+                        shadow.set(p[0], p[1], true);
+                    }
+                }
+                row.push(shadow);
+            }
+            result.shadows.push(row);
+        }
+        result
+    }
+
+    pub fn shadow(&self, x: u64, y: u64) -> &FixedBitGrid {
+        let x = x as usize;
+        let y = y as usize;
+        &self.shadows[x][y]
+    }
+}
+
+#[derive(Clone)]
+pub struct FixedGridObstacles<'a> {
+    bounds: GridBounds,
+    obstacles: FixedBitGrid,
+    spaces: FixedBitGrid,
+    noises: Noises,
+    brand_new: bool,
+    all_space_overlaps: bool,
+    out_of_bounds: bool,
+    shadows: &'a RobotShadows,
+}
+
+impl<'a> FixedGridObstacles<'a> {
+    pub fn new(
+        bounds: &BoundingBox,
+        square_size_m: f64,
+        noises: Noises,
+        shadows: &'a RobotShadows,
+    ) -> Self {
+        let bounds = GridBounds::new(bounds, square_size_m);
+        Self {
+            obstacles: bounds.blank_grid(),
+            spaces: bounds.blank_grid(),
+            bounds,
+            noises,
+            brand_new: true,
+            all_space_overlaps: true,
+            out_of_bounds: false,
+            shadows,
+        }
+    }
+
+    pub fn obstacle_space_independent(&self) -> bool {
+        let overlaps = self.obstacles.intersection(&self.spaces).unwrap();
+        let osi = overlaps.ones().all(|(x, y)| {
+            self.spaces
+                .manhattan_neighbors(x, y)
+                .any(|(_, _, is_on)| !is_on)
+        });
+        osi
+    }
+
+    pub fn inconsistency(&self) -> Option<Inconsistency> {
+        if !self.all_space_overlaps {
+            Some(Inconsistency::SeparatedSpaces)
+        } else if !self.obstacle_space_independent() {
+            Some(Inconsistency::ObstacleSpaceOverlap)
+        } else if self.out_of_bounds {
+            Some(Inconsistency::OffMap)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> SensorNoiseMap for FixedGridObstacles<'a> {
+    type SensorType = Bump;
+
+    fn sensor_update(&mut self, pose: RobotPose<Radians>, sensor_info: Option<&Self::SensorType>) {
+        if self.bounds.in_bounds(pose.pos) {
+            match sensor_info {
+                Some(bump) => {
+                    let float_location = bump.bump_location(pose);
+                    let p = self.bounds.grid_location(float_location);
+                    self.obstacles.set(p[0], p[1], true);
+                }
+                None => {
+                    let p = self.bounds.grid_location(pose.pos);
+                    let shadow = self.shadows.shadow(p[0], p[1]);
+                    let overlap = self.spaces.intersection(shadow).unwrap();
+                    let overlap = overlap.count_bits_on() > 0;
+                    self.all_space_overlaps =
+                        self.all_space_overlaps && (self.brand_new || overlap);
+                    self.brand_new = false;
+                    self.spaces = self.spaces.union(shadow).unwrap();
+                }
+            }
+        } else {
+            self.out_of_bounds = true;
+        }
+    }
+
+    fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
+        self.noises.noise(sensor_info)
+    }
+}
+
+impl<'a> ConsistentMap for FixedGridObstacles<'a> {
+    fn is_consistent(&self) -> bool {
+        self.inconsistency().is_none()
+    }
+}
