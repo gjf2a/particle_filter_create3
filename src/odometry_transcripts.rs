@@ -9,6 +9,7 @@ const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
 
 use crate::SensorInfo;
 
+#[derive(Clone)]
 pub struct Transcript {
     steps: Vec<SensorInfo>,
     actual_ending_point: FloatPoint,
