@@ -1,4 +1,3 @@
-use enum_iterator::all;
 use particle_filter::{
     FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose,
     consistent::{ConsistentMap, ConsistentParticleFilter},
@@ -8,7 +7,7 @@ use std::cmp::Ordering;
 
 use crate::{
     Bump, Noises,
-    fixed_grid_obstacles::{FixedGridObstacles, GridBounds, Inconsistency, RobotShadows},
+    fixed_grid_obstacles::{FixedGridObstacles, FixedGridObstaclesStats, GridBounds, Inconsistency, RobotShadows},
     grid_obstacles::GridObstacles,
     odometry_transcripts::Transcript,
 };
@@ -17,9 +16,10 @@ pub fn fixed_consistent_driver(
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
+    radius_border_multiplier: f64,
     transcript: &Transcript,
 ) {
-    let bounds = GridBounds::new(&transcript.bounding_box(), square_size_m);
+    let bounds = GridBounds::new(radius_border_multiplier, &transcript.bounding_box(), square_size_m);
     let shadows = RobotShadows::new(&bounds);
     let starting_map = FixedGridObstacles::new(bounds, noises, &shadows);
     let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
@@ -34,29 +34,16 @@ pub fn fixed_consistent_driver(
         }
     }
 
-    if !particle_filter.failed() {
-        let odometry_pose = transcript.final_pose();
-        println!("Odometry:      {odometry_pose}");
-        println!("Actual:        {}", transcript.actual());
-        println!("Error:         {}", transcript.error_robot_stop());
-        let (closest, dist) = closest_estimate(&transcript.actual(), &particle_filter);
-        println!("Estimate:      {closest} ({dist:.2})");
-        println!("Error:         {}", transcript.error_to(closest.pos));
-    }
-
-    let stats = particle_filter.stats();
-    for inc in all::<Inconsistency>() {
-        let total = stats.stats_for(&inc);
-        println!("Total {inc:?}: {}", total.total_count());
-    }
+    consistent_report(transcript, &particle_filter);
+    inconsistent_report(&particle_filter.stats(), particle_filter.failed());
 }
 
-pub fn consistent_driver(
+pub fn consistent_expr(
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
     transcript: &Transcript,
-) {
+) -> ConsistentParticleFilter<GridObstacles> {
     let starting_map = GridObstacles::new(square_size_m, noises);
     let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
     for (i, sensor_info) in transcript.iter().enumerate() {
@@ -69,27 +56,37 @@ pub fn consistent_driver(
             break;
         }
     }
+    particle_filter
+}
 
+pub fn consistent_report<M: ConsistentMap>(transcript: &Transcript, particle_filter: &ConsistentParticleFilter<M>) {
     if !particle_filter.failed() {
         let odometry_pose = transcript.final_pose();
-        println!("Odometry:      {odometry_pose}");
         println!("Actual:        {}", transcript.actual());
+        println!("Odometry:      {odometry_pose}");
         println!("Error:         {}", transcript.error_robot_stop());
         let (closest, dist) = closest_estimate(&transcript.actual(), &particle_filter);
         println!("Estimate:      {closest} ({dist:.2})");
         println!("Error:         {}", transcript.error_to(closest.pos));
     }
+}
 
-    let stats = particle_filter.stats();
+pub fn inconsistent_report(stats: &FixedGridObstaclesStats, failed: bool) {
     let inconsistencies = stats.by_iteration();
-    println!("Iterations with inconsistencies:  {}", inconsistencies.len());
+    println!(
+        "Iterations with inconsistencies:  {}",
+        inconsistencies.len()
+    );
     println!(
         "Total inconsistencies:            {}",
         inconsistencies.total_count()
     );
-    println!("Total obstacle/space issues: {}", stats.total_collision());
-    println!("Total discontinuity issues:  {}", stats.total_discontinuous());
-    if particle_filter.failed() {
+    println!("Total obstacle/space issues: {}", stats.total_for(&Inconsistency::ObstacleSpaceOverlap));
+    println!(
+        "Total discontinuity issues:  {}",
+        stats.total_for(&Inconsistency::SeparatedSpaces)
+    );
+    if failed {
         println!("{inconsistencies}");
     }
 }
