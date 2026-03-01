@@ -9,3 +9,5 @@ bit_grid = {git = "https://github.com/gjf2a/bit_grid"}
 anyhow = "1.0.101"
 ryu = "1.0.23"
 eframe = "0.33.3"
+hash_histogram = "0.14.0"
+enum-iterator = "2"

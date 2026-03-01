@@ -1,9 +1,10 @@
 use std::{f64::consts::PI, iter::repeat};
 
 use bit_grid::{BitGrid, GrowingBitGrid};
+use hash_histogram::HashHistogram;
 use particle_filter::{
     BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose, SensorNoiseMap,
-    consistent::ConsistentMap,
+    consistent::{ConsistentMap, StatCollector},
 };
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
@@ -15,7 +16,7 @@ pub struct GridObstacles {
     square_size_m: f64,
     noises: Noises,
     brand_new: bool,
-    all_space_overlaps: bool,
+    space_contiguous: bool,
 }
 
 impl GridObstacles {
@@ -26,7 +27,7 @@ impl GridObstacles {
             square_size_m,
             noises,
             brand_new: true,
-            all_space_overlaps: true,
+            space_contiguous: true,
         }
     }
 
@@ -91,6 +92,10 @@ impl GridObstacles {
         self.obstacles.count_bits_on()
     }
 
+    pub fn space_contiguous(&self) -> bool {
+        self.space_contiguous
+    }
+
     pub fn obstacle_space_independent(&self) -> bool {
         let overlaps = self.obstacles.intersection(&self.spaces).unwrap();
         let osi = overlaps.ones().all(|(x, y)| {
@@ -133,8 +138,8 @@ impl SensorNoiseMap for GridObstacles {
                     self.to_point(pose.pos),
                     &mut self.spaces,
                 );
-                self.all_space_overlaps = self.all_space_overlaps && (self.brand_new || overlap);
-                if !self.all_space_overlaps {
+                self.space_contiguous = self.space_contiguous && (self.brand_new || overlap);
+                if !self.space_contiguous {
                     println!("space gap!");
                 }
                 self.brand_new = false;
@@ -161,8 +166,49 @@ impl ObstacleMap for GridObstacles {
 }
 
 impl ConsistentMap for GridObstacles {
+    type StatType = GridObstaclesStats;
+
     fn is_consistent(&self) -> bool {
-        self.all_space_overlaps && self.obstacle_space_independent()
+        self.space_contiguous && self.obstacle_space_independent()
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct GridObstaclesStats {
+    space_breaks: HashHistogram<usize, usize>,
+    obstacle_space_collisions: HashHistogram<usize, usize>,
+}
+
+impl GridObstaclesStats {
+    pub fn total_space(&self) -> usize {
+        self.space_breaks.total_count()
+    }
+
+    pub fn total_collision(&self) -> usize {
+        self.obstacle_space_collisions.total_count()
+    }
+
+    pub fn total(&self) -> usize {
+        self.total_space() + self.total_collision()
+    }
+
+    pub fn by_iteration(&self) -> HashHistogram<usize, usize> {
+        let mut result = self.obstacle_space_collisions.clone();
+        for (key, count) in self.obstacle_space_collisions.iter() {
+            result.bump_by(key, *count);
+        }
+        result
+    }
+}
+
+impl StatCollector<GridObstacles> for GridObstaclesStats {
+    fn gather_data_from(&mut self, iteration: usize, particle: &GridObstacles) {
+        if !particle.obstacle_space_independent() {
+            self.obstacle_space_collisions.bump(&iteration);
+        }
+        if !particle.space_contiguous() {
+            self.space_breaks.bump(&iteration);
+        }
     }
 }
 

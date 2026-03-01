@@ -1,10 +1,49 @@
+use enum_iterator::all;
 use particle_filter::{
     FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose,
-    consistent::ConsistentParticleFilter, stats::Stats,
+    consistent::{ConsistentMap, ConsistentParticleFilter}, stats::Stats,
 };
 use std::cmp::Ordering;
 
-use crate::{Bump, Noises, grid_obstacles::GridObstacles, odometry_transcripts::Transcript};
+use crate::{Bump, Noises, fixed_grid_obstacles::{FixedGridObstacles, GridBounds, Inconsistency, RobotShadows}, grid_obstacles::GridObstacles, odometry_transcripts::Transcript};
+
+pub fn fixed_consistent_driver(
+    square_size_m: f64,
+    noises: Noises,
+    num_particles: usize,
+    transcript: &Transcript,
+) {
+    let bounds = GridBounds::new(&transcript.bounding_box(), square_size_m);
+    let shadows = RobotShadows::new(&bounds);
+    let starting_map = FixedGridObstacles::new(bounds, noises, &shadows);
+    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
+    for (i, sensor_info) in transcript.iter().enumerate() {
+        if i % 1000 == 0 {
+            println!("{i}/{}", transcript.len());
+        }
+        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+        if particle_filter.failed() {
+            println!("Failed at iteration {i}");
+            break;
+        }
+    }
+
+    if !particle_filter.failed() {
+        let odometry_pose = transcript.final_pose();
+        println!("Odometry:      {odometry_pose}");
+        println!("Actual:        {}", transcript.actual());
+        println!("Error:         {}", transcript.error_robot_stop());
+        let (closest, dist) = closest_estimate(&transcript.actual(), &particle_filter);
+        println!("Estimate:      {closest} ({dist:.2})");
+        println!("Error:         {}", transcript.error_to(closest.pos));
+    }
+
+    let stats = particle_filter.stats();
+    for inc in all::<Inconsistency>() {
+        let total = stats.stats_for(&inc);
+        println!("Total {inc:?}: {}", total.total_count());
+    }
+}
 
 pub fn consistent_driver(
     square_size_m: f64,
@@ -35,18 +74,19 @@ pub fn consistent_driver(
         println!("Error:         {}", transcript.error_to(closest.pos));
     }
 
-    let histogram = particle_filter.iteration_inconsistencies();
-    println!("Iterations with inconsistencies: {}", histogram.len());
+    let stats = particle_filter.stats();
+    let inconsistencies = stats.by_iteration();
+    println!("Iterations with inconsistencies: {}", inconsistencies.len());
     println!(
         "Total inconsistencies:           {}",
-        histogram.total_count()
+        inconsistencies.total_count()
     );
-    println!("{histogram}");
+    println!("{inconsistencies}");
 }
 
-pub fn closest_estimate(
+pub fn closest_estimate<M: ConsistentMap>(
     actual: &FloatPoint,
-    particles: &ConsistentParticleFilter<GridObstacles>,
+    particles: &ConsistentParticleFilter<M>,
 ) -> (RobotPose<Radians>, f64) {
     particles
         .particles()

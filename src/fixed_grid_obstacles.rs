@@ -1,14 +1,16 @@
-use std::{f64::consts::PI, iter::repeat};
+use std::{collections::HashMap, f64::consts::PI, iter::repeat};
 
 use bit_grid::{BitGrid, FixedBitGrid};
+use enum_iterator::{Sequence, all};
+use hash_histogram::HashHistogram;
 use particle_filter::{
     BoundingBox, FloatPoint, GridPoint, Noise, Point, Radians, RobotPose, SensorNoiseMap,
-    consistent::ConsistentMap,
+    consistent::{ConsistentMap, StatCollector},
 };
 
 use crate::{Bump, CREATE3_RADIUS, Noises};
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Sequence, Debug)]
 pub enum Inconsistency {
     ObstacleSpaceOverlap,
     SeparatedSpaces,
@@ -99,10 +101,14 @@ impl RobotShadows {
                 let grid_point = GridPoint::new([x, y]);
                 let min = grid_point - repeat(bounds.robot_grid_radius()).collect::<Point<_, _>>();
                 let max = grid_point + repeat(bounds.robot_grid_radius()).collect::<Point<_, _>>();
-                let max = max.element_max(&limit);
+                let max = max.element_min(&limit);
                 for p in min.point_iter(&max) {
                     if p.manhattan_distance(grid_point) <= bounds.robot_grid_radius() {
-                        shadow.set(p[0], p[1], true);
+                        if shadow.in_bounds(p[0], p[1]) {
+                            shadow.set(p[0], p[1], true);
+                        } else {
+                            panic!("Out of bounds: {p}; {limit}; {min} {max} {} {}", bounds.width(), bounds.height());
+                        }
                     }
                 }
                 row.push(shadow);
@@ -126,26 +132,24 @@ pub struct FixedGridObstacles<'a> {
     spaces: FixedBitGrid,
     noises: Noises,
     brand_new: bool,
-    all_space_overlaps: bool,
+    space_contiguous: bool,
     out_of_bounds: bool,
     shadows: &'a RobotShadows,
 }
 
 impl<'a> FixedGridObstacles<'a> {
     pub fn new(
-        bounds: &BoundingBox,
-        square_size_m: f64,
+        bounds: GridBounds,
         noises: Noises,
         shadows: &'a RobotShadows,
     ) -> Self {
-        let bounds = GridBounds::new(bounds, square_size_m);
         Self {
             obstacles: bounds.blank_grid(),
             spaces: bounds.blank_grid(),
             bounds,
             noises,
             brand_new: true,
-            all_space_overlaps: true,
+            space_contiguous: true,
             out_of_bounds: false,
             shadows,
         }
@@ -162,7 +166,7 @@ impl<'a> FixedGridObstacles<'a> {
     }
 
     pub fn inconsistency(&self) -> Option<Inconsistency> {
-        if !self.all_space_overlaps {
+        if !self.space_contiguous {
             Some(Inconsistency::SeparatedSpaces)
         } else if !self.obstacle_space_independent() {
             Some(Inconsistency::ObstacleSpaceOverlap)
@@ -183,17 +187,25 @@ impl<'a> SensorNoiseMap for FixedGridObstacles<'a> {
                 Some(bump) => {
                     let float_location = bump.bump_location(pose);
                     let p = self.bounds.grid_location(float_location);
-                    self.obstacles.set(p[0], p[1], true);
+                    if self.obstacles.in_bounds(p[0], p[1]) {
+                        self.obstacles.set(p[0], p[1], true);
+                    } else {
+                        self.out_of_bounds = true;
+                    }
                 }
                 None => {
                     let p = self.bounds.grid_location(pose.pos);
-                    let shadow = self.shadows.shadow(p[0], p[1]);
-                    let overlap = self.spaces.intersection(shadow).unwrap();
-                    let overlap = overlap.count_bits_on() > 0;
-                    self.all_space_overlaps =
-                        self.all_space_overlaps && (self.brand_new || overlap);
-                    self.brand_new = false;
-                    self.spaces = self.spaces.union(shadow).unwrap();
+                    if self.spaces.in_bounds(p[0], p[1]) {
+                        let shadow = self.shadows.shadow(p[0], p[1]);
+                        let overlap = self.spaces.intersection(shadow).unwrap();
+                        let overlap = overlap.count_bits_on() > 0;
+                        self.space_contiguous =
+                            self.space_contiguous && (self.brand_new || overlap);
+                        self.brand_new = false;
+                        self.spaces = self.spaces.union(shadow).unwrap();
+                    } else {
+                        self.out_of_bounds = true;
+                    }
                 }
             }
         } else {
@@ -207,7 +219,34 @@ impl<'a> SensorNoiseMap for FixedGridObstacles<'a> {
 }
 
 impl<'a> ConsistentMap for FixedGridObstacles<'a> {
+    type StatType = FixedGridObstaclesStats;
+
     fn is_consistent(&self) -> bool {
         self.inconsistency().is_none()
+    }
+}
+
+#[derive(Clone)]
+pub struct FixedGridObstaclesStats {
+    stats: HashMap<Inconsistency, HashHistogram<usize, usize>>,
+}
+
+impl FixedGridObstaclesStats {
+    pub fn stats_for(&self, key: &Inconsistency) -> &HashHistogram<usize, usize> {
+        self.stats.get(key).unwrap()
+    }
+}
+
+impl Default for FixedGridObstaclesStats {
+    fn default() -> Self {
+        Self { stats: all::<Inconsistency>().map(|inc| (inc, HashHistogram::default())).collect() }
+    }
+}
+
+impl<'a> StatCollector<FixedGridObstacles<'a>> for FixedGridObstaclesStats {
+    fn gather_data_from(&mut self, iteration: usize, particle: &FixedGridObstacles) {
+        if let Some(inconsistency) = particle.inconsistency() {
+            self.stats.get_mut(&inconsistency).unwrap().bump(&iteration);
+        }
     }
 }
