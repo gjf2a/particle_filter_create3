@@ -299,6 +299,7 @@ impl MainApp {
             egui::Sense::hover(),
         );
         let shadow = map.robot_shadow(pose);
+        let frontier = map.frontier_spaces();
         let response_rect = response.rect;
         let (min_x, min_y) = map.upper_left_x_y();
         for (x, y, cell) in map.points() {
@@ -314,8 +315,14 @@ impl MainApp {
                     y: y_rect + MAP_CELL_SIZE,
                 },
             );
-            let fill_color = if cell == Cell::Space && shadow.is_set(x, y) {
-                Color32::GRAY
+            let fill_color = if cell == Cell::Space {
+                if frontier.contains(&(x, y)) {
+                    Color32::CYAN
+                } else if shadow.is_set(x, y) {
+                    Color32::GRAY
+                } else {
+                    cell.color()
+                }
             } else {
                 cell.color()
             };

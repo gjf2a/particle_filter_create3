@@ -1,4 +1,4 @@
-use std::{f64::consts::PI, iter::repeat};
+use std::{collections::HashSet, f64::consts::PI, iter::repeat};
 
 use bit_grid::{BitGrid, GrowingBitGrid};
 use eframe::egui::Color32;
@@ -113,12 +113,17 @@ impl GridObstacles {
     }
 
     pub fn robot_shadow(&self, pose: RobotPose<Radians>) -> GrowingBitGrid {
+        self.grid_shadow(self.to_point(pose.pos))
+    }
+
+    fn grid_shadow(&self, grid_point: Point<i64, 2>) -> GrowingBitGrid {
         let mut shadow = self.obstacles.zero_clone();
         Self::draw_overlapping_shadow_on(
             self.robot_grid_radius(),
-            self.to_point(pose.pos),
+            grid_point,
             &mut shadow,
         );
+        shadow.downsize_to(&self.obstacles);
         shadow
     }
 
@@ -169,13 +174,20 @@ impl GridObstacles {
             None
         }
     }
-    /*
-    pub fn frontier_spaces(&self) -> impl Iterator<Item = (i64,i64)> {
+    
+    pub fn frontier_spaces(&self) -> HashSet<(i64,i64)> {
         let spaces_with_obstacles = self.spaces.union(&self.obstacles).unwrap();
-        let frontier_spaces = spaces_with_obstacles.ones_touching_zeros().filter(|(x, y)| !self.obstacles.is_set(*x, *y));
-        todo!();
+        spaces_with_obstacles
+            .ones_touching_zeros()
+            .filter(|(x, y)| !self.obstacles.is_set(*x, *y))
+            .filter(|(x, y)| {
+                let shadow = self.grid_shadow(Point::<i64, 2>::new([*x, *y]));
+                assert!(shadow.matching_dimensions(&self.obstacles));
+                shadow.intersection(&self.obstacles).unwrap().count_bits_on() == 0
+            })
+            .collect()
     }
-
+    /* 
     pub fn filled_in(&self) -> bool {
         self.frontier_spaces().count() == 0
     }
