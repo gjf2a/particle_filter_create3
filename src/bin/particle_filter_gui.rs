@@ -68,7 +68,11 @@ const FRAME_INTERVAL: f32 = 1.0 / FPS;
 impl eframe::App for MainApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading(format!("Particle Filter: {}", self.filename));
+            ui.heading(format!(
+                "Particle Filter: {}; Duration {:.2}s",
+                self.filename,
+                self.transcript.total_time_seconds()
+            ));
             ui.horizontal(|ui| {
                 self.render_settings(ui);
                 if let Some(results) = self.results.take() {
@@ -126,19 +130,6 @@ impl MainApp {
             ui.horizontal(|ui| {
                 ui.label("Meters per square");
                 ui.text_edit_singleline(&mut self.m_per_square);
-            });
-
-            ui.vertical(|ui| {
-                ui.radio_value(
-                    &mut self.selection_strategy,
-                    SelectionStrategy::Uniform,
-                    "Uniform",
-                );
-                ui.radio_value(
-                    &mut self.selection_strategy,
-                    SelectionStrategy::DistanceWeight,
-                    "Weighted",
-                );
             });
 
             if ui.button("Start").clicked() {
@@ -297,18 +288,18 @@ impl MainApp {
                 Estimate::Failure(failure_iteration) => {
                     ui.label(format!("Failure Iteration: {failure_iteration}"));
                 }
-                Estimate::Success(
-                    closest_estimate,
-                    estimate_error,
-                    dist_to_actual,
-                    _map,
-                    farthest_estimate,
-                ) => {
-                    ui.label(format!("Particle pose: {closest_estimate}"));
-                    ui.label(format!("Particle error: {estimate_error}"));
-                    ui.label(format!("Particle to actual: {dist_to_actual:.2}m"));
+                Estimate::Success(data) => {
+                    ui.label(format!("Particle pose: {}", data.closest_estimate));
+                    ui.label(format!("Particle error: {}", data.estimate_to_actual));
+                    ui.label(format!("Particle to actual: {:.2}m", data.closest_error));
                     ui.label(format!(
-                        "Farthest particle distance: {farthest_estimate:.2}m"
+                        "Farthest particle distance: {:.2}m",
+                        data.farthest_to_actual
+                    ));
+                    let (all_frontier, open_frontier, ratio) = data.all_and_open_frontier_counts();
+                    ui.label(format!(
+                        "Frontier counts: {open_frontier}/{all_frontier} ({:.2}%)",
+                        ratio * 100.0
                     ));
                 }
             }

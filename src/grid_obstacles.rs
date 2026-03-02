@@ -78,10 +78,10 @@ impl GridObstacles {
     pub fn cell_for(&self, x: i64, y: i64) -> Cell {
         if self.spaces.is_set(x, y) {
             if self.obstacles.is_set(x, y) {
-                if self.all_neighbors_spaces(x, y) {
-                    Cell::Inconsistent
-                } else {
+                if self.consistent_obstacle(x, y) {
                     Cell::Obstacle
+                } else {
+                    Cell::Inconsistent
                 }
             } else {
                 Cell::Space
@@ -160,16 +160,21 @@ impl GridObstacles {
     }
 
     pub fn obstacle_space_independent(&self) -> bool {
-        let overlaps = self.obstacles.intersection(&self.spaces).unwrap();
-        overlaps
+        self.obstacles
             .ones()
-            .all(|(x, y)| !self.all_neighbors_spaces(x, y))
+            .all(|(x, y)| self.consistent_obstacle(x, y))
     }
 
-    pub fn all_neighbors_spaces(&self, x: i64, y: i64) -> bool {
+    pub fn num_neighbors_spaces(&self, x: i64, y: i64) -> usize {
         self.spaces
             .manhattan_neighbors(x, y)
-            .all(|(_, _, is_on)| is_on)
+            .filter(|(_, _, is_on)| *is_on)
+            .count()
+    }
+
+    pub fn consistent_obstacle(&self, x: i64, y: i64) -> bool {
+        let neighbor_spaces = self.num_neighbors_spaces(x, y);
+        0 < neighbor_spaces && neighbor_spaces < 4
     }
 
     pub fn inconsistency(&self) -> Option<Inconsistency> {
@@ -205,11 +210,6 @@ impl GridObstacles {
             .copied()
             .collect()
     }
-    /*
-    pub fn filled_in(&self) -> bool {
-        self.frontier_spaces().count() == 0
-    }
-    */
 }
 
 impl SensorNoiseMap for GridObstacles {

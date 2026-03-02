@@ -97,9 +97,30 @@ pub fn inconsistent_expr(
 }
 
 #[derive(Clone)]
+pub struct SuccessData {
+    pub closest_estimate: RobotPose<Radians>,
+    pub closest_error: FloatPoint,
+    pub estimate_to_actual: f64,
+    pub map: GridObstacles,
+    pub farthest_to_actual: f64,
+}
+
+impl SuccessData {
+    pub fn all_and_open_frontier_counts(&self) -> (usize, usize, f64) {
+        let all_counts = self.map.all_frontier_spaces().len();
+        let open_counts = self.map.open_frontier_spaces().len();
+        (
+            all_counts,
+            open_counts,
+            open_counts as f64 / all_counts as f64,
+        )
+    }
+}
+
+#[derive(Clone)]
 pub enum Estimate {
     Failure(usize),
-    Success(RobotPose<Radians>, FloatPoint, f64, GridObstacles, f64),
+    Success(SuccessData),
 }
 
 impl Estimate {
@@ -110,15 +131,22 @@ impl Estimate {
         if particle_filter.total_iterations() < transcript.len() {
             Self::Failure(particle_filter.total_iterations())
         } else {
-            let (closest_estimate, dist_to_actual, map) =
+            let (closest_estimate, estimate_to_actual, map) =
                 closest_estimate(&transcript.actual(), &particle_filter);
-            Self::Success(
+            Self::Success(SuccessData {
                 closest_estimate,
-                transcript.error_to(closest_estimate.pos),
-                dist_to_actual,
+                closest_error: transcript.error_to(closest_estimate.pos),
+                estimate_to_actual,
                 map,
-                farthest_estimate(&transcript.actual(), particle_filter),
-            )
+                farthest_to_actual: farthest_estimate(&transcript.actual(), particle_filter),
+            })
+        }
+    }
+
+    pub fn option(&self) -> Option<SuccessData> {
+        match self {
+            Estimate::Failure(_) => None,
+            Estimate::Success(success_data) => Some(success_data.clone()),
         }
     }
 }
@@ -169,18 +197,12 @@ impl ConsistentData {
             Estimate::Failure(failure_iteration) => {
                 println!("Failure Iteration: {failure_iteration}");
             }
-            Estimate::Success(
-                closest_estimate,
-                estimate_error,
-                dist_to_actual,
-                map,
-                farthest_estimate,
-            ) => {
-                println!("Particle pose: {closest_estimate}");
-                println!("Particle error: {estimate_error}");
-                println!("Particle to actual: {dist_to_actual:.2}");
-                println!("Dimensions: {} x {}", map.width(), map.height());
-                println!("Farthest particle distance: {farthest_estimate}");
+            Estimate::Success(data) => {
+                println!("Particle pose: {}", data.closest_estimate);
+                println!("Particle error: {}", data.closest_error);
+                println!("Particle to actual: {:.2}", data.estimate_to_actual);
+                println!("Dimensions: {} x {}", data.map.width(), data.map.height());
+                println!("Farthest particle distance: {}", data.farthest_to_actual);
             }
         }
         println!(
