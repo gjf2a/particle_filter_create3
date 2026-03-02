@@ -1,7 +1,7 @@
 use hash_histogram::HashHistogram;
 use particle_filter::{
     FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose,
-    consistent::{ConsistentMap, ConsistentParticleFilter},
+    consistent::{ConsistentMap, ConsistentParticleFilter, SelectionStrategy},
     stats::Stats,
 };
 use std::cmp::Ordering;
@@ -29,7 +29,7 @@ pub fn fixed_consistent_driver(
     );
     let shadows = RobotShadows::new(&bounds);
     let starting_map = FixedGridObstacles::new(bounds, noises, &shadows);
-    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
+    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map, SelectionStrategy::Uniform);
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
             println!("{i}/{}", transcript.len());
@@ -52,7 +52,7 @@ pub fn consistent_expr(
     transcript: &Transcript,
 ) -> ConsistentParticleFilter<GridObstacles> {
     let starting_map = GridObstacles::new(square_size_m, noises);
-    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
+    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map, SelectionStrategy::Uniform);
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
             println!("{i}/{}", transcript.len());

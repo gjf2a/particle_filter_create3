@@ -1,7 +1,7 @@
 use bit_grid::BitGrid;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Pos2, Rect, Ui, Vec2, Visuals};
-use particle_filter::{Degrees, Noise, Radians, RobotPose, consistent::ConsistentParticleFilter};
+use particle_filter::{Degrees, Noise, Radians, RobotPose, consistent::{ConsistentParticleFilter, SelectionStrategy}};
 use particle_filter_create3::{
     Noises,
     drivers::{ConsistentData, Estimate},
@@ -45,6 +45,7 @@ pub fn main() {
 #[derive(Clone)]
 struct MainApp {
     transcript: Transcript,
+    selection_strategy: SelectionStrategy,
     num_particles: String,
     m_per_square: String,
     obst_noise_xy: String,
@@ -79,6 +80,7 @@ impl MainApp {
     fn new(transcript: Transcript) -> Self {
         Self {
             transcript,
+            selection_strategy: SelectionStrategy::Uniform,
             m_per_square: "0.1".to_string(),
             num_particles: "100".to_string(),
             clear_noise_xy: "7e-4".to_string(),
@@ -120,6 +122,11 @@ impl MainApp {
                 ui.text_edit_singleline(&mut self.m_per_square);
             });
 
+            ui.vertical(|ui| {
+                ui.radio_value(&mut self.selection_strategy, SelectionStrategy::Uniform, "Uniform");
+                ui.radio_value(&mut self.selection_strategy, SelectionStrategy::DistanceWeight, "Weighted");
+            });
+
             if ui.button("Start").clicked() {
                 if let Err(e) = self.start() {
                     ui.label(format!("{e}"));
@@ -138,6 +145,7 @@ impl MainApp {
     }
 
     fn start(&self) -> anyhow::Result<()> {
+        let selection_strategy = self.selection_strategy;
         let num_particles = self.num_particles.parse::<usize>()?;
         let square_size_m = self.m_per_square.parse::<f64>()?;
         let noises = self.noises_from_ui()?;
@@ -147,6 +155,7 @@ impl MainApp {
         std::thread::spawn(move || {
             Self::growing_grid_loop(
                 transcript,
+                selection_strategy,
                 square_size_m,
                 noises,
                 num_particles,
@@ -172,6 +181,7 @@ impl MainApp {
 
     fn growing_grid_loop(
         transcript: Transcript,
+        selection_strategy: SelectionStrategy,
         square_size_m: f64,
         noises: Noises,
         num_particles: usize,
@@ -181,7 +191,7 @@ impl MainApp {
         let start = Instant::now();
         results.store(None);
         let starting_map = GridObstacles::new(square_size_m, noises);
-        let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
+        let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map, selection_strategy);
         for (i, sensor_info) in transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let map = particle.map().clone();
@@ -260,7 +270,7 @@ impl MainApp {
                     map,
                     farthest_estimate,
                 ) => {
-                    Self::render_map(ui, map, *closest_estimate);
+                    //Self::render_map(ui, map, *closest_estimate);
                     ui.label(format!("Actual position: {}", results.actual));
                     ui.label(format!("Odometry pose: {}", results.odometry_pose));
                     ui.label(format!("Odometry error: {}", results.odometry_error));
