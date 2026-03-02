@@ -290,8 +290,8 @@ impl MainApp {
                 }
                 Estimate::Success(data) => {
                     ui.label(format!("Particle pose: {}", data.closest_estimate));
-                    ui.label(format!("Particle error: {}", data.estimate_to_actual));
-                    ui.label(format!("Particle to actual: {:.2}m", data.closest_error));
+                    ui.label(format!("Particle error: {}", data.closest_error));
+                    ui.label(format!("Particle to actual: {:.2}m", data.estimate_to_actual));
                     ui.label(format!(
                         "Farthest particle distance: {:.2}m",
                         data.farthest_to_actual
