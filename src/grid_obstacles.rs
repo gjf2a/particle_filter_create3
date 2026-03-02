@@ -1,6 +1,7 @@
 use std::{f64::consts::PI, iter::repeat};
 
 use bit_grid::{BitGrid, GrowingBitGrid};
+use eframe::egui::Color32;
 use particle_filter::{
     BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose, SensorNoiseMap,
     consistent::{ConsistentMap, StatCollector},
@@ -10,6 +11,25 @@ use crate::{
     Bump, CREATE3_RADIUS, Noises,
     fixed_grid_obstacles::{FixedGridObstaclesStats, Inconsistency},
 };
+
+#[derive(Copy, Clone)]
+pub enum Cell {
+    Obstacle,
+    Space,
+    Unvisited,
+    Inconsistent,
+}
+
+impl Cell {
+    pub fn color(&self) -> Color32 {
+        match self {
+            Cell::Obstacle => Color32::BLACK,
+            Cell::Space => Color32::CYAN,
+            Cell::Unvisited => Color32::KHAKI,
+            Cell::Inconsistent => Color32::RED,
+        }
+    }
+}
 
 #[derive(Clone, PartialEq)]
 pub struct GridObstacles {
@@ -31,6 +51,31 @@ impl GridObstacles {
             brand_new: true,
             space_contiguous: true,
         }
+    }
+
+    pub fn upper_left_x_y(&self) -> (i64, i64) {
+        let (x_min, _, y_min, _) = self.spaces.x_min_x_max_y_min_y_max();
+        (x_min, y_min)
+    }
+
+    pub fn points(&self) -> impl Iterator<Item = (i64, i64, Cell)> {
+        self.spaces.coord_iter().map(|(x, y)| {
+            (
+                x,
+                y,
+                if self.spaces.is_set(x, y) {
+                    if self.obstacles.is_set(x, y) {
+                        Cell::Inconsistent
+                    } else {
+                        Cell::Space
+                    }
+                } else if self.obstacles.is_set(x, y) {
+                    Cell::Obstacle
+                } else {
+                    Cell::Unvisited
+                },
+            )
+        })
     }
 
     pub fn width(&self) -> i64 {

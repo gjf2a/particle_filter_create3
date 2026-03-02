@@ -66,33 +66,34 @@ pub fn consistent_expr(
     particle_filter
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone)]
 pub enum Estimate {
     Failure(usize),
-    Success(RobotPose<Radians>, FloatPoint, f64, f64),
+    Success(RobotPose<Radians>, FloatPoint, f64, GridObstacles, f64),
 }
 
 impl Estimate {
-    pub fn new<M: ConsistentMap>(
+    pub fn new(
         transcript: &Transcript,
-        particle_filter: &ConsistentParticleFilter<M>,
+        particle_filter: &ConsistentParticleFilter<GridObstacles>,
     ) -> Self {
         if particle_filter.total_iterations() < transcript.len() {
             Self::Failure(particle_filter.total_iterations())
         } else {
-            let (closest_estimate, dist_to_actual) =
+            let (closest_estimate, dist_to_actual, map) =
                 closest_estimate(&transcript.actual(), &particle_filter);
             Self::Success(
                 closest_estimate,
                 transcript.error_to(closest_estimate.pos),
                 dist_to_actual,
-                farthest_estimate(&transcript.actual(), particle_filter)
+                map,
+                farthest_estimate(&transcript.actual(), particle_filter),
             )
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ConsistentData {
     pub outcome: Estimate,
     pub actual: FloatPoint,
@@ -106,9 +107,9 @@ pub struct ConsistentData {
 }
 
 impl ConsistentData {
-    pub fn new<M: ConsistentMap>(
+    pub fn new(
         transcript: &Transcript,
-        particle_filter: &ConsistentParticleFilter<M>,
+        particle_filter: &ConsistentParticleFilter<GridObstacles>,
         stats: &FixedGridObstaclesStats,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
@@ -135,7 +136,7 @@ pub fn consistent_report<M: ConsistentMap>(
         println!("Actual:        {}", transcript.actual());
         println!("Odometry:      {odometry_pose}");
         println!("Error:         {}", transcript.error_robot_stop());
-        let (closest, dist) = closest_estimate(&transcript.actual(), &particle_filter);
+        let (closest, dist, _) = closest_estimate(&transcript.actual(), &particle_filter);
         println!("Estimate:      {closest} ({dist:.2})");
         println!("Error:         {}", transcript.error_to(closest.pos));
     }
@@ -167,16 +168,17 @@ pub fn inconsistent_report(stats: &FixedGridObstaclesStats, failed: bool) {
 pub fn closest_estimate<M: ConsistentMap>(
     actual: &FloatPoint,
     particles: &ConsistentParticleFilter<M>,
-) -> (RobotPose<Radians>, f64) {
+) -> (RobotPose<Radians>, f64, M) {
     particles
         .particles()
         .map(|p| {
             (
                 p.estimated_pose(),
                 p.estimated_pose().pos.euclidean_distance(*actual),
+                p.map().clone(),
             )
         })
-        .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .min_by(|(_, dist1, _), (_, dist2, _)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
         .unwrap()
 }
 
