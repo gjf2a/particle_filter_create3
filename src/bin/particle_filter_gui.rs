@@ -2,10 +2,12 @@ use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Context, Pos2, Ui, Vec2, Visuals};
 use particle_filter::{Degrees, Noise, consistent::ConsistentParticleFilter};
 use particle_filter_create3::{
-    Noises, drivers::consistent_expr, grid_obstacles::GridObstacles,
+    Noises,
+    drivers::{ConsistentData, Estimate},
+    grid_obstacles::GridObstacles,
     odometry_transcripts::Transcript,
 };
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Instant};
 
 pub fn main() {
     let args = env::args().collect::<Vec<_>>();
@@ -34,13 +36,6 @@ pub fn main() {
     .unwrap();
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Default)]
-enum MapChoice {
-    #[default]
-    FixedGrid,
-    GrowingGrid,
-}
-
 #[derive(Clone)]
 struct MainApp {
     transcript: Transcript,
@@ -51,7 +46,35 @@ struct MainApp {
     obst_noise_theta: String,
     clear_noise_xy: String,
     clear_noise_theta: String,
+    last_progress: Option<String>,
     progress: Arc<AtomicCell<Option<String>>>,
+    results: Arc<AtomicCell<Option<ConsistentData>>>,
+}
+
+const FPS: f32 = 20.0;
+const FRAME_INTERVAL: f32 = 1.0 / FPS;
+
+impl eframe::App for MainApp {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Particle Filters");
+            ui.horizontal(|ui| {
+                self.render_settings(ui);
+                if let Some(results) = self.results.take() {
+                    self.results.store(Some(results.clone()));
+                    Self::render_results(ui, &results);
+                }
+            });            
+            ctx.request_repaint_after_secs(FRAME_INTERVAL);
+        });
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Default)]
+enum MapChoice {
+    #[default]
+    FixedGrid,
+    GrowingGrid,
 }
 
 impl MainApp {
@@ -65,7 +88,9 @@ impl MainApp {
             clear_noise_theta: "2e-4".to_string(),
             obst_noise_xy: "0.016".to_string(),
             obst_noise_theta: "0.31".to_string(),
+            last_progress: None,
             progress: Arc::new(AtomicCell::new(None)),
+            results: Arc::new(AtomicCell::new(None)),
         }
     }
 
@@ -112,13 +137,41 @@ impl MainApp {
                     ui.label(format!("{e}"));
                 }
             }
+
+            if let Some(progress) = self.progress.take() {
+                self.last_progress = Some(progress);
+            }
+
+            if let Some(progress) = &self.last_progress {
+                ui.label(progress);
+            }
         });
     }
 
     fn start(&self) -> anyhow::Result<()> {
         let num_particles = self.num_particles.parse::<usize>()?;
         let square_size_m = self.m_per_square.parse::<f64>()?;
-        let noises = Noises {
+        let noises = self.noises_from_ui()?;
+        let transcript = self.transcript.clone();
+        let which_one = self.map_choice;
+        let progress = self.progress.clone();
+        let results = self.results.clone();
+        std::thread::spawn(move || match which_one {
+            MapChoice::FixedGrid => todo!(),
+            MapChoice::GrowingGrid => Self::growing_grid_loop(
+                transcript,
+                square_size_m,
+                noises,
+                num_particles,
+                progress,
+                results,
+            ),
+        });
+        Ok(())
+    }
+
+    fn noises_from_ui(&self) -> anyhow::Result<Noises> {
+        Ok(Noises {
             odom: Noise {
                 stdev_x_y: self.clear_noise_xy.parse::<f64>()?,
                 stdev_angle: Degrees::new(self.clear_noise_theta.parse::<f64>()?),
@@ -127,29 +180,48 @@ impl MainApp {
                 stdev_x_y: self.obst_noise_xy.parse::<f64>()?,
                 stdev_angle: Degrees::new(self.obst_noise_theta.parse::<f64>()?),
             },
-        };
-        let transcript = self.transcript.clone();
-        let which_one = self.map_choice;
-        let progress = self.progress.clone();
-        std::thread::spawn(move || match which_one {
-            MapChoice::FixedGrid => todo!(),
-            MapChoice::GrowingGrid => {
-                let starting_map = GridObstacles::new(square_size_m, noises);
-                let mut particle_filter =
-                    ConsistentParticleFilter::new(num_particles, &starting_map);
-                for (i, sensor_info) in transcript.iter().enumerate() {
-                    progress.store(Some(format!("{i}/{}", transcript.len())));
-                    particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
-                    if particle_filter.failed() {
-                        progress.store(Some(format!("Failed at iteration {i}")));
-                        break;
-                    }
-                }
+        })
+    }
 
-                todo!("Display the results on the GUI somehow");
+    fn growing_grid_loop(
+        transcript: Transcript,
+        square_size_m: f64,
+        noises: Noises,
+        num_particles: usize,
+        progress: Arc<AtomicCell<Option<String>>>,
+        results: Arc<AtomicCell<Option<ConsistentData>>>,
+    ) {
+        let start = Instant::now();
+        results.store(None);
+        let starting_map = GridObstacles::new(square_size_m, noises);
+        let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
+        for (i, sensor_info) in transcript.iter().enumerate() {
+            let elapsed = Instant::now().duration_since(start);
+            Self::send_progress(progress.clone(), i, transcript.len(), elapsed.as_secs_f64());
+            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+            if particle_filter.failed() {
+                progress.store(Some(format!("Failed at iteration {i}")));
+                break;
             }
-        });
-        Ok(())
+        }
+        results.store(Some(Self::pack_results(transcript, particle_filter)));
+    }
+
+    fn send_progress(
+        progress: Arc<AtomicCell<Option<String>>>,
+        i: usize,
+        len: usize,
+        elapsed: f64,
+    ) {
+        progress.store(Some(format!("{i}/{len} ({elapsed:.2}s)")));
+    }
+
+    fn pack_results(
+        transcript: Transcript,
+        particle_filter: ConsistentParticleFilter<GridObstacles>,
+    ) -> ConsistentData {
+        let stats = particle_filter.stats();
+        ConsistentData::new(&transcript, &particle_filter, &stats)
     }
 
     fn noise_entry(ui: &mut Ui, header: &str, entry_x_y: &mut String, entry_theta: &mut String) {
@@ -165,16 +237,39 @@ impl MainApp {
             });
         });
     }
-}
 
-impl eframe::App for MainApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Particle Filters");
-            ui.horizontal(|ui| {
-                self.render_settings(ui);
-                ui.vertical(|ui| {});
-            });
+    fn render_results(ui: &mut Ui, results: &ConsistentData) {
+        ui.vertical(|ui| {
+            match results.outcome {
+                Estimate::Failure(failure_iteration) => {
+                    ui.label(format!("Failure Iteration: {failure_iteration}"));
+                }
+                Estimate::Success(closest_estimate, estimate_error, dist_to_actual, farthest_estimate) => {
+                    ui.label(format!("Actual position: {}", results.actual));
+                    ui.label(format!("Odometry pose: {}", results.odometry_pose));
+                    ui.label(format!("Odometry error: {}", results.odometry_error));
+                    ui.label(format!("Particle pose: {closest_estimate}"));
+                    ui.label(format!("Particle error: {estimate_error}"));
+                    ui.label(format!("Distance to actual: {dist_to_actual}"));
+                    ui.label(format!("Farthest particle distance: {farthest_estimate}"));
+                }
+            }
+            ui.label(format!(
+                "Iterations w/inconsistencies: {}",
+                results.iterations_with_inconsistencies
+            ));
+            ui.label(format!(
+                "Total inconsistencies: {}",
+                results.total_inconsistencies
+            ));
+            ui.label(format!(
+                "Total obstacle/space: {}",
+                results.obstacle_space_issues
+            ));
+            ui.label(format!(
+                "Total discontinuity: {}",
+                results.discontinuity_issues
+            ));
         });
     }
 }

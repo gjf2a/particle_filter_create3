@@ -1,3 +1,4 @@
+use hash_histogram::HashHistogram;
 use particle_filter::{
     FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose,
     consistent::{ConsistentMap, ConsistentParticleFilter},
@@ -65,6 +66,66 @@ pub fn consistent_expr(
     particle_filter
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum Estimate {
+    Failure(usize),
+    Success(RobotPose<Radians>, FloatPoint, f64, f64),
+}
+
+impl Estimate {
+    pub fn new<M: ConsistentMap>(
+        transcript: &Transcript,
+        particle_filter: &ConsistentParticleFilter<M>,
+    ) -> Self {
+        if particle_filter.total_iterations() < transcript.len() {
+            Self::Failure(particle_filter.total_iterations())
+        } else {
+            let (closest_estimate, dist_to_actual) =
+                closest_estimate(&transcript.actual(), &particle_filter);
+            Self::Success(
+                closest_estimate,
+                transcript.error_to(closest_estimate.pos),
+                dist_to_actual,
+                farthest_estimate(&transcript.actual(), particle_filter)
+            )
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ConsistentData {
+    pub outcome: Estimate,
+    pub actual: FloatPoint,
+    pub odometry_pose: RobotPose<Radians>,
+    pub odometry_error: FloatPoint,
+    pub iterations_with_inconsistencies: usize,
+    pub total_inconsistencies: usize,
+    pub obstacle_space_issues: usize,
+    pub discontinuity_issues: usize,
+    pub iteration_inconsistencies: HashHistogram<usize>,
+}
+
+impl ConsistentData {
+    pub fn new<M: ConsistentMap>(
+        transcript: &Transcript,
+        particle_filter: &ConsistentParticleFilter<M>,
+        stats: &FixedGridObstaclesStats,
+    ) -> Self {
+        let iteration_inconsistencies = stats.by_iteration();
+        Self {
+            outcome: Estimate::new(transcript, particle_filter),
+            actual: transcript.actual(),
+            odometry_pose: transcript.final_pose(),
+            odometry_error: transcript.error_robot_stop(),
+            iterations_with_inconsistencies: iteration_inconsistencies.len(),
+            total_inconsistencies: iteration_inconsistencies.total_count(),
+            obstacle_space_issues: stats.total_for(&Inconsistency::ObstacleSpaceOverlap),
+            discontinuity_issues: stats.total_for(&Inconsistency::SeparatedSpaces),
+            iteration_inconsistencies,
+        }
+    }
+}
+
 pub fn consistent_report<M: ConsistentMap>(
     transcript: &Transcript,
     particle_filter: &ConsistentParticleFilter<M>,
@@ -116,6 +177,17 @@ pub fn closest_estimate<M: ConsistentMap>(
             )
         })
         .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .unwrap()
+}
+
+pub fn farthest_estimate<M: ConsistentMap>(
+    actual: &FloatPoint,
+    particles: &ConsistentParticleFilter<M>,
+) -> f64 {
+    particles
+        .particles()
+        .map(|p| p.estimated_pose().pos.euclidean_distance(*actual))
+        .max_by(|dist1, dist2| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
         .unwrap()
 }
 
