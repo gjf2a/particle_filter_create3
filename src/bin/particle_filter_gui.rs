@@ -1,7 +1,10 @@
 use bit_grid::BitGrid;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Pos2, Rect, Ui, Vec2, Visuals};
-use particle_filter::{Degrees, Noise, Radians, RobotPose, consistent::{ConsistentParticleFilter, SelectionStrategy}};
+use particle_filter::{
+    Degrees, Noise, Radians, RobotPose,
+    consistent::{ConsistentParticleFilter, SelectionStrategy},
+};
 use particle_filter_create3::{
     Noises,
     drivers::{ConsistentData, Estimate},
@@ -18,7 +21,8 @@ pub fn main() {
         println!("Usage: particle_filter_gui fileneme");
         return;
     }
-    let transcript = Transcript::from_transcript(args[1].as_str()).unwrap();
+    let transcript_filename = args[1].as_str();
+    let transcript = Transcript::from_transcript(transcript_filename).unwrap();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -34,7 +38,7 @@ pub fn main() {
         "Particle Filters",
         native_options,
         Box::new(|cc| {
-            let mut app = MainApp::new(transcript);
+            let mut app = MainApp::new(transcript_filename, transcript);
             app.setup(&cc.egui_ctx);
             Ok(Box::new(app))
         }),
@@ -44,6 +48,7 @@ pub fn main() {
 
 #[derive(Clone)]
 struct MainApp {
+    filename: String,
     transcript: Transcript,
     selection_strategy: SelectionStrategy,
     num_particles: String,
@@ -63,7 +68,7 @@ const FRAME_INTERVAL: f32 = 1.0 / FPS;
 impl eframe::App for MainApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Particle Filters");
+            ui.heading(format!("Particle Filter: {}", self.filename));
             ui.horizontal(|ui| {
                 self.render_settings(ui);
                 if let Some(results) = self.results.take() {
@@ -77,12 +82,13 @@ impl eframe::App for MainApp {
 }
 
 impl MainApp {
-    fn new(transcript: Transcript) -> Self {
+    fn new(filename: &str, transcript: Transcript) -> Self {
         Self {
+            filename: filename.to_string(),
             transcript,
-            selection_strategy: SelectionStrategy::Uniform,
+            selection_strategy: SelectionStrategy::DistanceWeight,
             m_per_square: "0.1".to_string(),
-            num_particles: "100".to_string(),
+            num_particles: "1000".to_string(),
             clear_noise_xy: "7e-4".to_string(),
             clear_noise_theta: "2e-4".to_string(),
             obst_noise_xy: "0.016".to_string(),
@@ -123,8 +129,16 @@ impl MainApp {
             });
 
             ui.vertical(|ui| {
-                ui.radio_value(&mut self.selection_strategy, SelectionStrategy::Uniform, "Uniform");
-                ui.radio_value(&mut self.selection_strategy, SelectionStrategy::DistanceWeight, "Weighted");
+                ui.radio_value(
+                    &mut self.selection_strategy,
+                    SelectionStrategy::Uniform,
+                    "Uniform",
+                );
+                ui.radio_value(
+                    &mut self.selection_strategy,
+                    SelectionStrategy::DistanceWeight,
+                    "Weighted",
+                );
             });
 
             if ui.button("Start").clicked() {
@@ -139,6 +153,14 @@ impl MainApp {
 
             if let Some((progress, map, pose)) = &self.last_progress {
                 ui.label(progress);
+                ui.label(format!(
+                    "{} x {} squares: {} words",
+                    map.width(),
+                    map.height(),
+                    map.map_words_used()
+                ));
+                let whm = map.width_height_meters();
+                ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
                 Self::render_map(ui, map, *pose);
             }
         });
@@ -191,7 +213,8 @@ impl MainApp {
         let start = Instant::now();
         results.store(None);
         let starting_map = GridObstacles::new(square_size_m, noises);
-        let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map, selection_strategy);
+        let mut particle_filter =
+            ConsistentParticleFilter::new(num_particles, &starting_map, selection_strategy);
         for (i, sensor_info) in transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let map = particle.map().clone();
@@ -207,14 +230,15 @@ impl MainApp {
             );
             particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
             if let Some(failure) = particle_filter.example_failure() {
-                if particle_filter.failed() {
-                    progress.store(Some((
-                        format!("Failed at iteration {i}"),
-                        failure.map().clone(),
-                        failure.estimated_pose(),
-                    )));
-                    break;
-                }
+                Self::send_progress(
+                    progress,
+                    i,
+                    transcript.len(),
+                    elapsed.as_secs_f64(),
+                    &failure.map(),
+                    failure.estimated_pose(),
+                );
+                break;
             }
         }
         results.store(Some(Self::pack_results(transcript, particle_filter)));
@@ -229,7 +253,10 @@ impl MainApp {
         pose: RobotPose<Radians>,
     ) {
         progress.store(Some((
-            format!("{i}/{len} ({elapsed:.2}s)"),
+            format!(
+                "{i}/{len} ({elapsed:.2}s; {:.1}ms/iteration)",
+                1000.0 * elapsed / i as f64
+            ),
             map.clone(),
             pose,
         )));
@@ -259,6 +286,13 @@ impl MainApp {
 
     fn render_results(ui: &mut Ui, results: &ConsistentData) {
         ui.vertical(|ui| {
+            ui.label(format!("Actual position: {}", results.actual));
+            ui.label(format!("Odometry pose: {}", results.odometry_pose));
+            ui.label(format!("Odometry error: {}", results.odometry_error));
+            ui.label(format!(
+                "Odometry to actual: {:.2}m",
+                results.odometry_distance
+            ));
             match &results.outcome {
                 Estimate::Failure(failure_iteration) => {
                     ui.label(format!("Failure Iteration: {failure_iteration}"));
@@ -267,18 +301,15 @@ impl MainApp {
                     closest_estimate,
                     estimate_error,
                     dist_to_actual,
-                    map,
+                    _map,
                     farthest_estimate,
                 ) => {
-                    //Self::render_map(ui, map, *closest_estimate);
-                    ui.label(format!("Actual position: {}", results.actual));
-                    ui.label(format!("Odometry pose: {}", results.odometry_pose));
-                    ui.label(format!("Odometry error: {}", results.odometry_error));
                     ui.label(format!("Particle pose: {closest_estimate}"));
                     ui.label(format!("Particle error: {estimate_error}"));
-                    ui.label(format!("Distance to actual: {dist_to_actual}"));
-                    ui.label(format!("Dimensions: {} x {}", map.width(), map.height()));
-                    ui.label(format!("Farthest particle distance: {farthest_estimate}"));
+                    ui.label(format!("Particle to actual: {dist_to_actual:.2}m"));
+                    ui.label(format!(
+                        "Farthest particle distance: {farthest_estimate:.2}m"
+                    ));
                 }
             }
             ui.label(format!(
@@ -309,7 +340,7 @@ impl MainApp {
             egui::Sense::hover(),
         );
         let shadow = map.robot_shadow(pose);
-        let frontier = map.frontier_spaces();
+        let frontier = map.open_frontier_spaces();
         let response_rect = response.rect;
         let (min_x, min_y) = map.upper_left_x_y();
         for (x, y, cell) in map.points() {

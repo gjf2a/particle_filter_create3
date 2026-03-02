@@ -53,33 +53,44 @@ impl GridObstacles {
         }
     }
 
+    pub fn map_words_used(&self) -> u64 {
+        self.obstacles.words_used() + self.spaces.words_used()
+    }
+
+    pub fn width_height_meters(&self) -> FloatPoint {
+        FloatPoint::new([
+            self.width() as f64 * self.square_size_m,
+            self.height() as f64 * self.square_size_m,
+        ])
+    }
+
     pub fn upper_left_x_y(&self) -> (i64, i64) {
         let (x_min, _, y_min, _) = self.spaces.x_min_x_max_y_min_y_max();
         (x_min, y_min)
     }
 
     pub fn points(&self) -> impl Iterator<Item = (i64, i64, Cell)> {
-        self.spaces.coord_iter().map(|(x, y)| {
-            (
-                x,
-                y,
-                if self.spaces.is_set(x, y) {
-                    if self.obstacles.is_set(x, y) {
-                        if self.all_neighbors_spaces(x, y) {
-                            Cell::Inconsistent
-                        } else {
-                            Cell::Obstacle
-                        }
-                    } else {
-                        Cell::Space
-                    }
-                } else if self.obstacles.is_set(x, y) {
-                    Cell::Obstacle
+        self.spaces
+            .coord_iter()
+            .map(|(x, y)| (x, y, self.cell_for(x, y)))
+    }
+
+    pub fn cell_for(&self, x: i64, y: i64) -> Cell {
+        if self.spaces.is_set(x, y) {
+            if self.obstacles.is_set(x, y) {
+                if self.all_neighbors_spaces(x, y) {
+                    Cell::Inconsistent
                 } else {
-                    Cell::Unvisited
-                },
-            )
-        })
+                    Cell::Obstacle
+                }
+            } else {
+                Cell::Space
+            }
+        } else if self.obstacles.is_set(x, y) {
+            Cell::Obstacle
+        } else {
+            Cell::Unvisited
+        }
     }
 
     pub fn width(&self) -> i64 {
@@ -118,11 +129,7 @@ impl GridObstacles {
 
     fn grid_shadow(&self, grid_point: Point<i64, 2>) -> GrowingBitGrid {
         let mut shadow = self.obstacles.zero_clone();
-        Self::draw_overlapping_shadow_on(
-            self.robot_grid_radius(),
-            grid_point,
-            &mut shadow,
-        );
+        Self::draw_overlapping_shadow_on(self.robot_grid_radius(), grid_point, &mut shadow);
         shadow.downsize_to(&self.obstacles);
         shadow
     }
@@ -174,20 +181,31 @@ impl GridObstacles {
             None
         }
     }
-    
-    pub fn frontier_spaces(&self) -> HashSet<(i64,i64)> {
+
+    pub fn all_frontier_spaces(&self) -> HashSet<(i64, i64)> {
         let spaces_with_obstacles = self.spaces.union(&self.obstacles).unwrap();
         spaces_with_obstacles
             .ones_touching_zeros()
             .filter(|(x, y)| !self.obstacles.is_set(*x, *y))
+            .collect()
+    }
+
+    pub fn open_frontier_spaces(&self) -> HashSet<(i64, i64)> {
+        self.all_frontier_spaces()
+            .iter()
             .filter(|(x, y)| {
                 let shadow = self.grid_shadow(Point::<i64, 2>::new([*x, *y]));
                 assert!(shadow.matching_dimensions(&self.obstacles));
-                shadow.intersection(&self.obstacles).unwrap().count_bits_on() == 0
+                shadow
+                    .intersection(&self.obstacles)
+                    .unwrap()
+                    .count_bits_on()
+                    == 0
             })
+            .copied()
             .collect()
     }
-    /* 
+    /*
     pub fn filled_in(&self) -> bool {
         self.frontier_spaces().count() == 0
     }

@@ -1,7 +1,7 @@
 use particle_filter::{Degrees, Noise};
 use particle_filter_create3::{
     Noises,
-    drivers::{ConsistentData, consistent_expr},
+    drivers::{baseline_report, inconsistent_expr},
     odometry_transcripts::Transcript,
 };
 
@@ -21,11 +21,10 @@ fn main() -> anyhow::Result<()> {
                 stdev_angle: Degrees::new(0.31),
             },
         };
-        let particle_filter = consistent_expr(square_size_m, noises, num_particles, &transcript);
-        let data = ConsistentData::new(&transcript, &particle_filter, &particle_filter.stats());
-        data.print();
+        let particle_filter = inconsistent_expr(square_size_m, noises, num_particles, &transcript);
+        baseline_report(&transcript, &particle_filter);
     } else {
-        println!("Usage: expr2_consistent transcript_filename num_particles square_size_m");
+        println!("Usage: expr2_inconsistent transcript_filename num_particles square_size_m");
     }
     Ok(())
 }

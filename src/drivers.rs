@@ -1,7 +1,8 @@
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose,
+    FloatPoint, ObstacleMap, ParticleFilter, Radians, RobotPose, SensorNoiseMap,
     consistent::{ConsistentMap, ConsistentParticleFilter, SelectionStrategy},
+    inconsistent::InconsistentParticleFilter,
     stats::Stats,
 };
 use std::cmp::Ordering;
@@ -29,7 +30,11 @@ pub fn fixed_consistent_driver(
     );
     let shadows = RobotShadows::new(&bounds);
     let starting_map = FixedGridObstacles::new(bounds, noises, &shadows);
-    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map, SelectionStrategy::Uniform);
+    let mut particle_filter = ConsistentParticleFilter::new(
+        num_particles,
+        &starting_map,
+        SelectionStrategy::DistanceWeight,
+    );
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
             println!("{i}/{}", transcript.len());
@@ -42,7 +47,7 @@ pub fn fixed_consistent_driver(
     }
 
     consistent_report(transcript, &particle_filter);
-    inconsistent_report(&particle_filter.stats(), particle_filter.failed());
+    inconsistent_report(&particle_filter.stats());
 }
 
 pub fn consistent_expr(
@@ -52,7 +57,32 @@ pub fn consistent_expr(
     transcript: &Transcript,
 ) -> ConsistentParticleFilter<GridObstacles> {
     let starting_map = GridObstacles::new(square_size_m, noises);
-    let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map, SelectionStrategy::Uniform);
+    let mut particle_filter = ConsistentParticleFilter::new(
+        num_particles,
+        &starting_map,
+        SelectionStrategy::DistanceWeight,
+    );
+    for (i, sensor_info) in transcript.iter().enumerate() {
+        if i % 1000 == 0 {
+            println!("{i}/{}", transcript.len());
+        }
+        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+        if particle_filter.failed() {
+            println!("Failed at iteration {i}");
+            break;
+        }
+    }
+    particle_filter
+}
+
+pub fn inconsistent_expr(
+    square_size_m: f64,
+    noises: Noises,
+    num_particles: usize,
+    transcript: &Transcript,
+) -> InconsistentParticleFilter<GridObstacles> {
+    let starting_map = GridObstacles::new(square_size_m, noises);
+    let mut particle_filter = InconsistentParticleFilter::new(num_particles, &starting_map);
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
             println!("{i}/{}", transcript.len());
@@ -99,6 +129,7 @@ pub struct ConsistentData {
     pub actual: FloatPoint,
     pub odometry_pose: RobotPose<Radians>,
     pub odometry_error: FloatPoint,
+    pub odometry_distance: f64,
     pub iterations_with_inconsistencies: usize,
     pub total_inconsistencies: usize,
     pub obstacle_space_issues: usize,
@@ -118,6 +149,9 @@ impl ConsistentData {
             actual: transcript.actual(),
             odometry_pose: transcript.final_pose(),
             odometry_error: transcript.error_robot_stop(),
+            odometry_distance: transcript
+                .error_robot_stop()
+                .euclidean_distance(FloatPoint::new([0.0, 0.0])),
             iterations_with_inconsistencies: iteration_inconsistencies.len(),
             total_inconsistencies: iteration_inconsistencies.total_count(),
             obstacle_space_issues: stats.total_for(&Inconsistency::ObstacleSpaceOverlap),
@@ -125,6 +159,56 @@ impl ConsistentData {
             iteration_inconsistencies,
         }
     }
+
+    pub fn print(&self) {
+        println!("Actual position: {}", self.actual);
+        println!("Odometry pose: {}", self.odometry_pose);
+        println!("Odometry error: {}", self.odometry_error);
+        println!("Odometry to actual: {:.2}", self.odometry_distance);
+        match &self.outcome {
+            Estimate::Failure(failure_iteration) => {
+                println!("Failure Iteration: {failure_iteration}");
+            }
+            Estimate::Success(
+                closest_estimate,
+                estimate_error,
+                dist_to_actual,
+                map,
+                farthest_estimate,
+            ) => {
+                println!("Particle pose: {closest_estimate}");
+                println!("Particle error: {estimate_error}");
+                println!("Particle to actual: {dist_to_actual:.2}");
+                println!("Dimensions: {} x {}", map.width(), map.height());
+                println!("Farthest particle distance: {farthest_estimate}");
+            }
+        }
+        println!(
+            "Iterations w/inconsistencies: {}",
+            self.iterations_with_inconsistencies
+        );
+        println!("Total inconsistencies: {}", self.total_inconsistencies);
+        println!("Total obstacle/space: {}", self.obstacle_space_issues);
+        println!("Total discontinuity: {}", self.discontinuity_issues);
+    }
+}
+
+pub fn baseline_report<M: SensorNoiseMap>(
+    transcript: &Transcript,
+    particle_filter: &InconsistentParticleFilter<M>,
+) {
+    let odometry_pose = transcript.final_pose();
+    println!("Actual:        {}", transcript.actual());
+    println!("Odometry:      {odometry_pose}");
+    println!("Error:         {}", transcript.error_robot_stop());
+    let (closest, dist, _) = closest_estimate_baseline(&transcript.actual(), &particle_filter);
+    println!("Estimate:      {closest}");
+    println!("Error:         {}", transcript.error_to(closest.pos));
+    println!("Close dist:    {dist:.2}");
+    println!(
+        "Far dist:      {:.2}",
+        farthest_estimate_baseline(&transcript.actual(), &particle_filter)
+    )
 }
 
 pub fn consistent_report<M: ConsistentMap>(
@@ -136,13 +220,24 @@ pub fn consistent_report<M: ConsistentMap>(
         println!("Actual:        {}", transcript.actual());
         println!("Odometry:      {odometry_pose}");
         println!("Error:         {}", transcript.error_robot_stop());
+        println!(
+            "Distance:      {:.2}",
+            transcript
+                .error_robot_stop()
+                .euclidean_distance(transcript.actual())
+        );
         let (closest, dist, _) = closest_estimate(&transcript.actual(), &particle_filter);
-        println!("Estimate:      {closest} ({dist:.2})");
+        println!("Estimate:      {closest}");
         println!("Error:         {}", transcript.error_to(closest.pos));
+        println!("Close dist:    {dist:.2}");
+        println!(
+            "Far dist:      {:.2}",
+            farthest_estimate(&transcript.actual(), &particle_filter)
+        )
     }
 }
 
-pub fn inconsistent_report(stats: &FixedGridObstaclesStats, failed: bool) {
+pub fn inconsistent_report(stats: &FixedGridObstaclesStats) {
     let inconsistencies = stats.by_iteration();
     println!(
         "Iterations with inconsistencies:  {}",
@@ -160,9 +255,8 @@ pub fn inconsistent_report(stats: &FixedGridObstaclesStats, failed: bool) {
         "Total discontinuity issues:  {}",
         stats.total_for(&Inconsistency::SeparatedSpaces)
     );
-    if failed {
-        println!("{inconsistencies}");
-    }
+
+    println!("{inconsistencies}");
 }
 
 pub fn closest_estimate<M: ConsistentMap>(
@@ -185,6 +279,34 @@ pub fn closest_estimate<M: ConsistentMap>(
 pub fn farthest_estimate<M: ConsistentMap>(
     actual: &FloatPoint,
     particles: &ConsistentParticleFilter<M>,
+) -> f64 {
+    particles
+        .particles()
+        .map(|p| p.estimated_pose().pos.euclidean_distance(*actual))
+        .max_by(|dist1, dist2| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .unwrap()
+}
+
+pub fn closest_estimate_baseline<M: SensorNoiseMap>(
+    actual: &FloatPoint,
+    particles: &InconsistentParticleFilter<M>,
+) -> (RobotPose<Radians>, f64, M) {
+    particles
+        .particles()
+        .map(|p| {
+            (
+                p.estimated_pose(),
+                p.estimated_pose().pos.euclidean_distance(*actual),
+                p.map().clone(),
+            )
+        })
+        .min_by(|(_, dist1, _), (_, dist2, _)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .unwrap()
+}
+
+pub fn farthest_estimate_baseline<M: SensorNoiseMap>(
+    actual: &FloatPoint,
+    particles: &InconsistentParticleFilter<M>,
 ) -> f64 {
     particles
         .particles()
