@@ -1,15 +1,16 @@
+use bit_grid::BitGrid;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Pos2, Rect, Ui, Vec2, Visuals};
-use particle_filter::{Degrees, Noise, consistent::ConsistentParticleFilter};
+use particle_filter::{Degrees, Noise, Radians, RobotPose, consistent::ConsistentParticleFilter};
 use particle_filter_create3::{
     Noises,
     drivers::{ConsistentData, Estimate},
-    grid_obstacles::GridObstacles,
+    grid_obstacles::{Cell, GridObstacles},
     odometry_transcripts::Transcript,
 };
 use std::{env, sync::Arc, time::Instant};
 
-const MAP_CELL_SIZE: f32 = 4.0;
+const MAP_CELL_SIZE: f32 = 3.0;
 
 pub fn main() {
     let args = env::args().collect::<Vec<_>>();
@@ -23,7 +24,7 @@ pub fn main() {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size(Vec2 {
                 x: 1200.0,
-                y: 600.0,
+                y: 900.0,
             })
             .with_position(Pos2 { x: 50.0, y: 25.0 })
             .with_drag_and_drop(true),
@@ -50,8 +51,8 @@ struct MainApp {
     obst_noise_theta: String,
     clear_noise_xy: String,
     clear_noise_theta: String,
-    last_progress: Option<String>,
-    progress: Arc<AtomicCell<Option<String>>>,
+    last_progress: Option<(String, GridObstacles, RobotPose<Radians>)>,
+    progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
     results: Arc<AtomicCell<Option<ConsistentData>>>,
 }
 
@@ -129,8 +130,9 @@ impl MainApp {
                 self.last_progress = Some(progress);
             }
 
-            if let Some(progress) = &self.last_progress {
+            if let Some((progress, map, pose)) = &self.last_progress {
                 ui.label(progress);
+                Self::render_map(ui, map, *pose);
             }
         });
     }
@@ -173,7 +175,7 @@ impl MainApp {
         square_size_m: f64,
         noises: Noises,
         num_particles: usize,
-        progress: Arc<AtomicCell<Option<String>>>,
+        progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
         results: Arc<AtomicCell<Option<ConsistentData>>>,
     ) {
         let start = Instant::now();
@@ -181,24 +183,46 @@ impl MainApp {
         let starting_map = GridObstacles::new(square_size_m, noises);
         let mut particle_filter = ConsistentParticleFilter::new(num_particles, &starting_map);
         for (i, sensor_info) in transcript.iter().enumerate() {
+            let particle = particle_filter.particles().next().unwrap();
+            let map = particle.map().clone();
+            let pose = particle.estimated_pose();
             let elapsed = Instant::now().duration_since(start);
-            Self::send_progress(progress.clone(), i, transcript.len(), elapsed.as_secs_f64());
+            Self::send_progress(
+                progress.clone(),
+                i,
+                transcript.len(),
+                elapsed.as_secs_f64(),
+                &map,
+                pose,
+            );
             particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
-            if particle_filter.failed() {
-                progress.store(Some(format!("Failed at iteration {i}")));
-                break;
+            if let Some(failure) = particle_filter.example_failure() {
+                if particle_filter.failed() {
+                    progress.store(Some((
+                        format!("Failed at iteration {i}"),
+                        failure.map().clone(),
+                        failure.estimated_pose(),
+                    )));
+                    break;
+                }
             }
         }
         results.store(Some(Self::pack_results(transcript, particle_filter)));
     }
 
     fn send_progress(
-        progress: Arc<AtomicCell<Option<String>>>,
+        progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
         i: usize,
         len: usize,
         elapsed: f64,
+        map: &GridObstacles,
+        pose: RobotPose<Radians>,
     ) {
-        progress.store(Some(format!("{i}/{len} ({elapsed:.2}s)")));
+        progress.store(Some((
+            format!("{i}/{len} ({elapsed:.2}s)"),
+            map.clone(),
+            pose,
+        )));
     }
 
     fn pack_results(
@@ -236,7 +260,7 @@ impl MainApp {
                     map,
                     farthest_estimate,
                 ) => {
-                    Self::render_map(ui, map);
+                    Self::render_map(ui, map, *closest_estimate);
                     ui.label(format!("Actual position: {}", results.actual));
                     ui.label(format!("Odometry pose: {}", results.odometry_pose));
                     ui.label(format!("Odometry error: {}", results.odometry_error));
@@ -266,19 +290,36 @@ impl MainApp {
         });
     }
 
-    fn render_map(ui: &mut Ui, map: &GridObstacles) {
+    fn render_map(ui: &mut Ui, map: &GridObstacles, pose: RobotPose<Radians>) {
         let (response, painter) = ui.allocate_painter(
-            Vec2::new(map.width() as f32 * MAP_CELL_SIZE, map.height() as f32 * MAP_CELL_SIZE),
+            Vec2::new(
+                map.width() as f32 * MAP_CELL_SIZE,
+                map.height() as f32 * MAP_CELL_SIZE,
+            ),
             egui::Sense::hover(),
         );
-        painter.rect_filled(response.rect, CornerRadius::ZERO, Color32::RED);
+        let shadow = map.robot_shadow(pose);
         let response_rect = response.rect;
         let (min_x, min_y) = map.upper_left_x_y();
         for (x, y, cell) in map.points() {
             let x_rect = ((x - min_x) as f32) * MAP_CELL_SIZE + response_rect.left();
-            let y_rect = ((y - min_y) as f32) * MAP_CELL_SIZE  + response_rect.top();
-            let rect = Rect::from_min_max(Pos2 { x: x_rect, y: y_rect }, Pos2 { x: x_rect + MAP_CELL_SIZE, y: y_rect + MAP_CELL_SIZE });
-            painter.rect_filled(rect, CornerRadius::ZERO, cell.color());   
+            let y_rect = ((y - min_y) as f32) * MAP_CELL_SIZE + response_rect.top();
+            let rect = Rect::from_min_max(
+                Pos2 {
+                    x: x_rect,
+                    y: y_rect,
+                },
+                Pos2 {
+                    x: x_rect + MAP_CELL_SIZE,
+                    y: y_rect + MAP_CELL_SIZE,
+                },
+            );
+            let fill_color = if cell == Cell::Space && shadow.is_set(x, y) {
+                Color32::GRAY
+            } else {
+                cell.color()
+            };
+            painter.rect_filled(rect, CornerRadius::ZERO, fill_color);
         }
     }
 }

@@ -12,7 +12,7 @@ use crate::{
     fixed_grid_obstacles::{FixedGridObstaclesStats, Inconsistency},
 };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Cell {
     Obstacle,
     Space,
@@ -23,9 +23,9 @@ pub enum Cell {
 impl Cell {
     pub fn color(&self) -> Color32 {
         match self {
-            Cell::Obstacle => Color32::BLACK,
-            Cell::Space => Color32::CYAN,
-            Cell::Unvisited => Color32::KHAKI,
+            Cell::Obstacle => Color32::PURPLE,
+            Cell::Space => Color32::LIGHT_BLUE,
+            Cell::Unvisited => Color32::LIGHT_YELLOW,
             Cell::Inconsistent => Color32::RED,
         }
     }
@@ -65,7 +65,11 @@ impl GridObstacles {
                 y,
                 if self.spaces.is_set(x, y) {
                     if self.obstacles.is_set(x, y) {
-                        Cell::Inconsistent
+                        if self.all_neighbors_spaces(x, y) {
+                            Cell::Inconsistent
+                        } else {
+                            Cell::Obstacle
+                        }
                     } else {
                         Cell::Space
                     }
@@ -108,7 +112,7 @@ impl GridObstacles {
         self.to_square(CREATE3_RADIUS * 4.0 / PI)
     }
 
-    pub fn robot_shadow(&mut self, pose: RobotPose<Radians>) -> GrowingBitGrid {
+    pub fn robot_shadow(&self, pose: RobotPose<Radians>) -> GrowingBitGrid {
         let mut shadow = self.obstacles.zero_clone();
         Self::draw_overlapping_shadow_on(
             self.robot_grid_radius(),
@@ -145,12 +149,15 @@ impl GridObstacles {
 
     pub fn obstacle_space_independent(&self) -> bool {
         let overlaps = self.obstacles.intersection(&self.spaces).unwrap();
-        let osi = overlaps.ones().all(|(x, y)| {
-            self.spaces
-                .manhattan_neighbors(x, y)
-                .any(|(_, _, is_on)| !is_on)
-        });
-        osi
+        overlaps
+            .ones()
+            .all(|(x, y)| !self.all_neighbors_spaces(x, y))
+    }
+
+    pub fn all_neighbors_spaces(&self, x: i64, y: i64) -> bool {
+        self.spaces
+            .manhattan_neighbors(x, y)
+            .all(|(_, _, is_on)| is_on)
     }
 
     pub fn inconsistency(&self) -> Option<Inconsistency> {
