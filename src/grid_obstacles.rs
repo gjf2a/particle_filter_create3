@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, f64::consts::PI, iter::repeat};
 
-use bit_grid::{BitGrid, GrowingBitGrid};
+use bit_grid::BitGrid;
 use eframe::egui::Color32;
 use enum_iterator::{Sequence, all};
 use hash_histogram::HashHistogram;
@@ -34,8 +34,8 @@ impl Cell {
 
 #[derive(Clone, PartialEq)]
 pub struct GridObstacles {
-    obstacles: GrowingBitGrid,
-    spaces: GrowingBitGrid,
+    obstacles: BitGrid,
+    spaces: BitGrid,
     square_size_m: f64,
     noises: Noises,
     brand_new: bool,
@@ -45,8 +45,8 @@ pub struct GridObstacles {
 impl GridObstacles {
     pub fn new(square_size_m: f64, noises: Noises) -> Self {
         Self {
-            obstacles: GrowingBitGrid::default(),
-            spaces: GrowingBitGrid::default(),
+            obstacles: BitGrid::default(),
+            spaces: BitGrid::default(),
             square_size_m,
             noises,
             brand_new: true,
@@ -124,11 +124,11 @@ impl GridObstacles {
         self.to_square(CREATE3_RADIUS * 4.0 / PI)
     }
 
-    pub fn robot_shadow(&self, pose: RobotPose<Radians>) -> GrowingBitGrid {
+    pub fn robot_shadow(&self, pose: RobotPose<Radians>) -> BitGrid {
         self.grid_shadow(self.to_point(pose.pos))
     }
 
-    fn grid_shadow(&self, grid_point: Point<i64, 2>) -> GrowingBitGrid {
+    fn grid_shadow(&self, grid_point: Point<i64, 2>) -> BitGrid {
         let mut shadow = self.obstacles.zero_clone();
         Self::draw_overlapping_shadow_on(self.robot_grid_radius(), grid_point, &mut shadow);
         shadow.downsize_to(&self.obstacles);
@@ -138,7 +138,7 @@ impl GridObstacles {
     pub fn draw_overlapping_shadow_on(
         robot_grid_radius: i64,
         grid_point: Point<i64, 2>,
-        grid: &mut GrowingBitGrid,
+        grid: &mut BitGrid,
     ) -> bool {
         let min = grid_point - repeat(robot_grid_radius).collect::<Point<_, _>>();
         let max = grid_point + repeat(robot_grid_radius).collect::<Point<_, _>>();
@@ -328,7 +328,6 @@ impl Default for GridObstaclesStats {
 
 #[cfg(test)]
 mod tests {
-    use bit_grid::BitGrid;
     use particle_filter::{FloatPoint, Radians, RobotPose};
 
     use crate::{Noises, grid_obstacles::GridObstacles};

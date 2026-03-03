@@ -1,4 +1,3 @@
-use bit_grid::BitGrid;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Pos2, Rect, Ui, Vec2, Visuals};
 use particle_filter::{
