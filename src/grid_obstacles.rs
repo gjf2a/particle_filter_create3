@@ -172,9 +172,17 @@ impl GridObstacles {
             .count()
     }
 
+    pub fn num_neighbors_unvisited_obstacles(&self, x: i64, y: i64) -> usize {
+        self.obstacles
+            .manhattan_neighbors(x, y)
+            .filter(|(x, y, is_on)| *is_on && !self.spaces.is_set(*x, *y))
+            .count()
+    }
+
     pub fn consistent_obstacle(&self, x: i64, y: i64) -> bool {
+        let neighbor_unvisited_obstacles = self.num_neighbors_unvisited_obstacles(x, y);
         let neighbor_spaces = self.num_neighbors_spaces(x, y);
-        0 < neighbor_spaces && neighbor_spaces < 4
+        neighbor_unvisited_obstacles > 0 || 0 < neighbor_spaces && neighbor_spaces < 4
     }
 
     pub fn inconsistency(&self) -> Option<Inconsistency> {
