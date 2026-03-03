@@ -1,7 +1,9 @@
-use std::{collections::HashSet, f64::consts::PI, iter::repeat};
+use std::{collections::{HashMap, HashSet}, f64::consts::PI, iter::repeat};
 
 use bit_grid::{BitGrid, GrowingBitGrid};
 use eframe::egui::Color32;
+use enum_iterator::{Sequence, all};
+use hash_histogram::HashHistogram;
 use particle_filter::{
     BoundingBox, FloatPoint, Noise, ObstacleMap, Point, Radians, RobotPose, SensorNoiseMap,
     consistent::{ConsistentMap, StatCollector},
@@ -9,7 +11,6 @@ use particle_filter::{
 
 use crate::{
     Bump, CREATE3_RADIUS, Noises,
-    fixed_grid_obstacles::{FixedGridObstaclesStats, Inconsistency},
 };
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -264,17 +265,63 @@ impl ObstacleMap for GridObstacles {
 }
 
 impl ConsistentMap for GridObstacles {
-    type StatType = FixedGridObstaclesStats;
+    type StatType = GridObstaclesStats;
 
     fn is_consistent(&self) -> bool {
         self.space_contiguous && self.obstacle_space_independent()
     }
 }
 
-impl StatCollector<GridObstacles> for FixedGridObstaclesStats {
+impl StatCollector<GridObstacles> for GridObstaclesStats {
     fn gather_data_from(&mut self, iteration: usize, particle: &GridObstacles) {
         if let Some(inconsistency) = particle.inconsistency() {
             self.stats.get_mut(&inconsistency).unwrap().bump(&iteration);
+        }
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Sequence, Debug)]
+pub enum Inconsistency {
+    ObstacleSpaceOverlap,
+    SeparatedSpaces,
+    OffMap,
+}
+
+#[derive(Clone)]
+pub struct GridObstaclesStats {
+    pub stats: HashMap<Inconsistency, HashHistogram<usize, usize>>,
+}
+
+impl GridObstaclesStats {
+    pub fn stats_for(&self, key: &Inconsistency) -> &HashHistogram<usize, usize> {
+        self.stats.get(key).unwrap()
+    }
+
+    pub fn total_for(&self, key: &Inconsistency) -> usize {
+        self.stats_for(key).total_count()
+    }
+
+    pub fn total(&self) -> usize {
+        all::<Inconsistency>().map(|inc| self.total_for(&inc)).sum()
+    }
+
+    pub fn by_iteration(&self) -> HashHistogram<usize, usize> {
+        let mut result = HashHistogram::new();
+        for counts in self.stats.values() {
+            for (key, count) in counts.iter() {
+                result.bump_by(key, *count);
+            }
+        }
+        result
+    }
+}
+
+impl Default for GridObstaclesStats {
+    fn default() -> Self {
+        Self {
+            stats: all::<Inconsistency>()
+                .map(|inc| (inc, HashHistogram::default()))
+                .collect(),
         }
     }
 }

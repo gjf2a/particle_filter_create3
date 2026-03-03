@@ -9,46 +9,9 @@ use std::cmp::Ordering;
 
 use crate::{
     Bump, Noises,
-    fixed_grid_obstacles::{
-        FixedGridObstacles, FixedGridObstaclesStats, GridBounds, Inconsistency, RobotShadows,
-    },
-    grid_obstacles::GridObstacles,
+    grid_obstacles::{GridObstacles, GridObstaclesStats, Inconsistency},
     odometry_transcripts::Transcript,
 };
-
-pub fn fixed_consistent_driver(
-    square_size_m: f64,
-    noises: Noises,
-    num_particles: usize,
-    radius_border_multiplier: f64,
-    transcript: &Transcript,
-) {
-    let bounds = GridBounds::new(
-        radius_border_multiplier,
-        &transcript.bounding_box(),
-        square_size_m,
-    );
-    let shadows = RobotShadows::new(&bounds);
-    let starting_map = FixedGridObstacles::new(bounds, noises, &shadows);
-    let mut particle_filter = ConsistentParticleFilter::new(
-        num_particles,
-        &starting_map,
-        SelectionStrategy::DistanceWeight,
-    );
-    for (i, sensor_info) in transcript.iter().enumerate() {
-        if i % 1000 == 0 {
-            println!("{i}/{}", transcript.len());
-        }
-        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
-        if particle_filter.failed() {
-            println!("Failed at iteration {i}");
-            break;
-        }
-    }
-
-    consistent_report(transcript, &particle_filter);
-    inconsistent_report(&particle_filter.stats());
-}
 
 pub fn consistent_expr(
     square_size_m: f64,
@@ -169,7 +132,7 @@ impl ConsistentData {
     pub fn new(
         transcript: &Transcript,
         particle_filter: &ConsistentParticleFilter<GridObstacles>,
-        stats: &FixedGridObstaclesStats,
+        stats: &GridObstaclesStats,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
         Self {
@@ -259,7 +222,7 @@ pub fn consistent_report<M: ConsistentMap>(
     }
 }
 
-pub fn inconsistent_report(stats: &FixedGridObstaclesStats) {
+pub fn inconsistent_report(stats: &GridObstaclesStats) {
     let inconsistencies = stats.by_iteration();
     println!(
         "Iterations with inconsistencies:  {}",
@@ -449,11 +412,6 @@ pub fn final_report(transcript: &Transcript, particle_filter: &ParticleFilter<Gr
         range_stats.max()
     );
 }
-/*
-pub fn error_stats<M: ObstacleMap>(particle_filter: &ParticleFilter<M>) -> Stats<f64> {
-    particle_filter.particles().map(|p| p.error() as f64).collect()
-}
-*/
 
 pub fn error_stats(particle_filter: &ParticleFilter<GridObstacles>) -> Stats<f64> {
     particle_filter
