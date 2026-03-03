@@ -11,7 +11,7 @@ use particle_filter_create3::{
     grid_obstacles::{Cell, GridObstacles},
     odometry_transcripts::Transcript,
 };
-use std::{env, sync::Arc, time::Instant};
+use std::{collections::HashSet, env, sync::Arc, time::Instant};
 
 const MAP_CELL_SIZE: f32 = 3.0;
 
@@ -152,7 +152,10 @@ impl MainApp {
                 ));
                 let whm = map.width_height_meters();
                 ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
-                Self::render_map(ui, map, *pose);
+                let frontier = map.open_frontier_spaces();
+                let all_frontier = map.all_frontier_spaces();
+                ui.label(format!("open/all frontier/all space: {}/{}/{}", frontier.len(), all_frontier.len(), map.num_spaces()));
+                Self::render_map(ui, map, *pose, &frontier);
             }
         });
     }
@@ -322,7 +325,7 @@ impl MainApp {
         });
     }
 
-    fn render_map(ui: &mut Ui, map: &GridObstacles, pose: RobotPose<Radians>) {
+    fn render_map(ui: &mut Ui, map: &GridObstacles, pose: RobotPose<Radians>, frontier: &HashSet<(i64,i64)>) {
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
                 map.width() as f32 * MAP_CELL_SIZE,
@@ -331,7 +334,6 @@ impl MainApp {
             egui::Sense::hover(),
         );
         let shadow = map.robot_shadow(pose);
-        let frontier = map.open_frontier_spaces();
         let response_rect = response.rect;
         let (min_x, min_y) = map.upper_left_x_y();
         for (x, y, cell) in map.points() {

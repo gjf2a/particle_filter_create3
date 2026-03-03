@@ -155,6 +155,10 @@ impl GridObstacles {
         self.obstacles.count_bits_on()
     }
 
+    pub fn num_spaces(&self) -> u64 {
+        self.spaces.count_bits_on()
+    }
+
     pub fn space_contiguous(&self) -> bool {
         self.space_contiguous
     }
