@@ -1,6 +1,6 @@
 use bit_grid::BitGrid;
 use crossbeam_utils::atomic::AtomicCell;
-use eframe::egui::{self, Color32, Context, CornerRadius, Pos2, Rect, Ui, Vec2, Visuals};
+use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 use particle_filter::{
     Degrees, Noise, Radians, RobotPose,
     consistent::{ConsistentParticleFilter, SelectionStrategy},
@@ -11,7 +11,11 @@ use particle_filter_create3::{
     grid_obstacles::{Cell, GridObstacles},
     odometry_transcripts::Transcript,
 };
-use std::{env, sync::Arc, time::Instant};
+use std::{
+    env,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 const MAP_CELL_SIZE: f32 = 3.0;
 
@@ -142,47 +146,45 @@ impl MainApp {
                 self.last_progress = Some(progress);
             }
 
-            if let Some((progress, map, pose)) = &self.last_progress {
-                ui.label(progress);
-                ui.label(format!(
-                    "{} x {} squares: {} words",
-                    map.width(),
-                    map.height(),
-                    map.map_words_used()
-                ));
-                let whm = map.width_height_meters();
-                ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
-                let frontier = map.open_frontier_spaces();
-                let all_frontier = map.all_frontier_spaces();
-                ui.label(format!(
-                    "open/all frontier/all space: {}/{}/{}",
-                    frontier.count_ones(),
-                    all_frontier.count_ones(),
-                    map.num_spaces()
-                ));
-                Self::render_map(ui, map, *pose, &frontier);
-            }
+            self.render_progress(ui);
         });
     }
 
+    fn render_progress(&self, ui: &mut Ui) {
+        if let Some((progress, map, pose)) = &self.last_progress {
+            ui.label(progress);
+            ui.label(format!(
+                "{} x {} squares: {} words",
+                map.width(),
+                map.height(),
+                map.map_words_used()
+            ));
+            let whm = map.width_height_meters();
+            ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
+            let frontier = map.open_frontier_spaces();
+            let all_frontier = map.all_frontier_spaces();
+            ui.label(format!(
+                "open/all frontier/all space: {}/{}/{}",
+                frontier.count_ones(),
+                all_frontier.count_ones(),
+                map.num_spaces()
+            ));
+            Self::render_map(ui, map, *pose, &frontier);
+        }
+    }
+
     fn start(&self) -> anyhow::Result<()> {
-        let selection_strategy = self.selection_strategy;
-        let num_particles = self.num_particles.parse::<usize>()?;
-        let square_size_m = self.m_per_square.parse::<f64>()?;
-        let noises = self.noises_from_ui()?;
-        let transcript = self.transcript.clone();
-        let progress = self.progress.clone();
-        let results = self.results.clone();
+        let runner = ParticleFilterRunner {
+            transcript: self.transcript.clone(),
+            selection_strategy: self.selection_strategy,
+            square_size_m: self.m_per_square.parse::<f64>()?,
+            noises: self.noises_from_ui()?,
+            num_particles: self.num_particles.parse::<usize>()?,
+            progress: self.progress.clone(),
+            results: self.results.clone(),
+        };
         std::thread::spawn(move || {
-            Self::growing_grid_loop(
-                transcript,
-                selection_strategy,
-                square_size_m,
-                noises,
-                num_particles,
-                progress,
-                results,
-            )
+            runner.run();
         });
         Ok(())
     }
@@ -198,75 +200,6 @@ impl MainApp {
                 stdev_angle: Degrees::new(self.obst_noise_theta.parse::<f64>()?),
             },
         })
-    }
-
-    fn growing_grid_loop(
-        transcript: Transcript,
-        selection_strategy: SelectionStrategy,
-        square_size_m: f64,
-        noises: Noises,
-        num_particles: usize,
-        progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
-        results: Arc<AtomicCell<Option<ConsistentData>>>,
-    ) {
-        let start = Instant::now();
-        results.store(None);
-        let starting_map = GridObstacles::new(square_size_m, noises);
-        let mut particle_filter =
-            ConsistentParticleFilter::new(num_particles, &starting_map, selection_strategy);
-        for (i, sensor_info) in transcript.iter().enumerate() {
-            let particle = particle_filter.particles().next().unwrap();
-            let map = particle.map().clone();
-            let pose = particle.estimated_pose();
-            let elapsed = Instant::now().duration_since(start);
-            Self::send_progress(
-                progress.clone(),
-                i,
-                transcript.len(),
-                elapsed.as_secs_f64(),
-                &map,
-                pose,
-            );
-            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
-            if let Some(failure) = particle_filter.example_failure() {
-                Self::send_progress(
-                    progress,
-                    i,
-                    transcript.len(),
-                    elapsed.as_secs_f64(),
-                    &failure.map(),
-                    failure.estimated_pose(),
-                );
-                break;
-            }
-        }
-        results.store(Some(Self::pack_results(transcript, particle_filter)));
-    }
-
-    fn send_progress(
-        progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
-        i: usize,
-        len: usize,
-        elapsed: f64,
-        map: &GridObstacles,
-        pose: RobotPose<Radians>,
-    ) {
-        progress.store(Some((
-            format!(
-                "{i}/{len} ({elapsed:.2}s; {:.1}ms/iteration)",
-                1000.0 * elapsed / i as f64
-            ),
-            map.clone(),
-            pose,
-        )));
-    }
-
-    fn pack_results(
-        transcript: Transcript,
-        particle_filter: ConsistentParticleFilter<GridObstacles>,
-    ) -> ConsistentData {
-        let stats = particle_filter.stats();
-        ConsistentData::new(&transcript, &particle_filter, &stats)
     }
 
     fn noise_entry(ui: &mut Ui, header: &str, entry_x_y: &mut String, entry_theta: &mut String) {
@@ -285,49 +218,14 @@ impl MainApp {
 
     fn render_results(ui: &mut Ui, results: &ConsistentData) {
         ui.vertical(|ui| {
+            render_outcome(ui, &results.outcome);
+
             ui.label(format!("Actual position: {}", results.actual));
             for line in results.odometry_report.report("Odometry") {
                 ui.label(line);
             }
-            match &results.outcome {
-                Estimate::Failure(failure_iteration) => {
-                    ui.label(format!("Failure Iteration: {failure_iteration}"));
-                }
-                Estimate::Success(data) => {
-                    for line in data.best_particle_to_actual.report("Best-particle") {
-                        ui.label(line);
-                    }
-                    ui.label(format!("Closest-particle rank: {}", data.closest_rank));
-                    for line in data.closest_to_actual.report("Closest-particle") {
-                        ui.label(line);
-                    }
-                    ui.label(format!(
-                        "Farthest particle distance: {:.2}m",
-                        data.farthest_to_actual
-                    ));
-                    let (all_frontier, open_frontier, ratio) = data.all_and_open_frontier_counts();
-                    ui.label(format!(
-                        "Frontier counts: {open_frontier}/{all_frontier} ({:.2}%)",
-                        ratio * 100.0
-                    ));
-                }
-            }
-            ui.label(format!(
-                "Iterations w/inconsistencies: {}",
-                results.iterations_with_inconsistencies
-            ));
-            ui.label(format!(
-                "Total inconsistencies: {}",
-                results.total_inconsistencies
-            ));
-            ui.label(format!(
-                "Total obstacle/space: {}",
-                results.obstacle_space_issues
-            ));
-            ui.label(format!(
-                "Total discontinuity: {}",
-                results.discontinuity_issues
-            ));
+
+            render_inconsistencies(ui, results);
         });
     }
 
@@ -345,28 +243,135 @@ impl MainApp {
         for (x, y, cell) in map.points() {
             let x_rect = ((x - min_x) as f32) * MAP_CELL_SIZE + response_rect.left();
             let y_rect = ((y - min_y) as f32) * MAP_CELL_SIZE + response_rect.top();
-            let rect = Rect::from_min_max(
-                Pos2 {
-                    x: x_rect,
-                    y: y_rect,
-                },
-                Pos2 {
-                    x: x_rect + MAP_CELL_SIZE,
-                    y: y_rect + MAP_CELL_SIZE,
-                },
-            );
-            let fill_color = if cell == Cell::Space {
-                if frontier.is_set(x, y) {
-                    Color32::CYAN
-                } else if shadow.is_set(x, y) {
-                    Color32::GRAY
-                } else {
-                    cell.color()
-                }
-            } else {
-                cell.color()
-            };
-            painter.rect_filled(rect, CornerRadius::ZERO, fill_color);
+            let color = cell_color(frontier, &shadow, cell, x, y);
+            paint_cell(&painter, x_rect, y_rect, color);
         }
+    }
+}
+
+fn paint_cell(painter: &Painter, x_rect: f32, y_rect: f32, color: Color32) {
+    let rect = Rect::from_min_max(
+        Pos2 {
+            x: x_rect,
+            y: y_rect,
+        },
+        Pos2 {
+            x: x_rect + MAP_CELL_SIZE,
+            y: y_rect + MAP_CELL_SIZE,
+        },
+    );
+    painter.rect_filled(rect, CornerRadius::ZERO, color);
+}
+
+fn cell_color(frontier: &BitGrid, shadow: &BitGrid, cell: Cell, x: i64, y: i64) -> Color32 {
+    if cell == Cell::Space {
+        if frontier.is_set(x, y) {
+            Color32::CYAN
+        } else if shadow.is_set(x, y) {
+            Color32::GRAY
+        } else {
+            cell.color()
+        }
+    } else {
+        cell.color()
+    }
+}
+
+fn render_outcome(ui: &mut Ui, outcome: &Estimate) {
+    match outcome {
+        Estimate::Failure(failure_iteration) => {
+            ui.label(format!("Failure Iteration: {failure_iteration}"));
+        }
+        Estimate::Success(data) => {
+            for line in data.best_particle_to_actual.report("Best-particle") {
+                ui.label(line);
+            }
+            ui.label(format!("Closest-particle rank: {}", data.closest_rank));
+            for line in data.closest_to_actual.report("Closest-particle") {
+                ui.label(line);
+            }
+            ui.label(format!(
+                "Farthest particle distance: {:.2}m",
+                data.farthest_to_actual
+            ));
+            let (all_frontier, open_frontier, ratio) = data.all_and_open_frontier_counts();
+            ui.label(format!(
+                "Frontier counts: {open_frontier}/{all_frontier} ({:.2}%)",
+                ratio * 100.0
+            ));
+        }
+    }
+}
+
+fn render_inconsistencies(ui: &mut Ui, results: &ConsistentData) {
+    ui.label(format!(
+        "Iterations w/inconsistencies: {}",
+        results.iterations_with_inconsistencies
+    ));
+    ui.label(format!(
+        "Total inconsistencies: {}",
+        results.total_inconsistencies
+    ));
+    ui.label(format!(
+        "Total obstacle/space: {}",
+        results.obstacle_space_issues
+    ));
+    ui.label(format!(
+        "Total discontinuity: {}",
+        results.discontinuity_issues
+    ));
+}
+
+pub struct ParticleFilterRunner {
+    transcript: Transcript,
+    selection_strategy: SelectionStrategy,
+    square_size_m: f64,
+    noises: Noises,
+    num_particles: usize,
+    progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
+    results: Arc<AtomicCell<Option<ConsistentData>>>,
+}
+
+impl ParticleFilterRunner {
+    pub fn run(&self) {
+        let start = Instant::now();
+        self.results.store(None);
+        let starting_map = GridObstacles::new(self.square_size_m, self.noises);
+        let mut particle_filter = ConsistentParticleFilter::new(
+            self.num_particles,
+            &starting_map,
+            self.selection_strategy,
+        );
+        for (i, sensor_info) in self.transcript.iter().enumerate() {
+            let particle = particle_filter.particles().next().unwrap();
+            let map = particle.map().clone();
+            let pose = particle.estimated_pose();
+            let elapsed = Instant::now().duration_since(start);
+            self.send_progress(i, elapsed, pose, &map);
+            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+            if let Some(failure) = particle_filter.example_failure() {
+                self.send_progress(i, elapsed, failure.estimated_pose(), &failure.map());
+                break;
+            }
+        }
+        let stats = particle_filter.stats();
+        let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
+        self.results.store(Some(packed_results));
+    }
+
+    pub fn send_progress(
+        &self,
+        i: usize,
+        elapsed: Duration,
+        pose: RobotPose<Radians>,
+        map: &GridObstacles,
+    ) {
+        let elapsed = elapsed.as_secs_f64();
+        let iteration = 1000.0 * elapsed / i as f64;
+        let msg = format!(
+            "{i}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)",
+            self.transcript.len()
+        );
+        self.progress.store(Some((msg, map.clone(), pose)));
     }
 }

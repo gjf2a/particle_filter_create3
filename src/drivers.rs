@@ -73,7 +73,8 @@ impl Estimate {
             Self::Failure(particle_filter.total_iterations())
         } else {
             let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
-            let (closest_estimate, map, closest_rank) = closest_estimate(&transcript.actual(), &particle_filter);
+            let (closest_estimate, map, closest_rank) =
+                closest_estimate(&transcript.actual(), &particle_filter);
             Self::Success(SuccessData {
                 best_particle_to_actual: transcript.pose_to_actual(best_pose),
                 closest_to_actual: transcript.pose_to_actual(closest_estimate),
@@ -165,10 +166,12 @@ pub fn closest_estimate<M: ConsistentMap>(
                 p.estimated_pose(),
                 p.estimated_pose().pos.euclidean_distance(*actual),
                 p.map().clone(),
-                i
+                i,
             )
         })
-        .min_by(|(_, dist1, _, _), (_, dist2, _, _)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .min_by(|(_, dist1, _, _), (_, dist2, _, _)| {
+            dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal)
+        })
         .map(|(pose, _, map, i)| (pose, map, i + 1))
         .unwrap()
 }
