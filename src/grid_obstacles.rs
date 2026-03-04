@@ -9,9 +9,7 @@ use particle_filter::{
     consistent::{ConsistentMap, StatCollector},
 };
 
-use crate::{
-    Bump, CREATE3_RADIUS, Noises,
-};
+use crate::{Bump, CREATE3_RADIUS, Noises};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Cell {
@@ -206,11 +204,7 @@ impl GridObstacles {
             .filter(|(x, y)| {
                 let shadow = self.grid_shadow(Point::<i64, 2>::new([*x, *y]));
                 assert!(shadow.matching_dimensions(&self.obstacles));
-                shadow
-                    .intersection(&self.obstacles)
-                    .unwrap()
-                    .count_ones()
-                    == 0
+                shadow.intersection(&self.obstacles).unwrap().count_ones() == 0
             })
             .collect()
     }

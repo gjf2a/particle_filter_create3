@@ -10,6 +10,26 @@ const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
 use crate::SensorInfo;
 
 #[derive(Clone)]
+pub struct PoseReport {
+    pose: RobotPose<Radians>,
+    error: FloatPoint,
+    distance: f64,
+}
+
+impl PoseReport {
+    pub fn report(&self, name: &str) -> [String; 3] {
+        [
+            format!("{name} pose: {}", self.pose),
+            format!(
+                "{name} error: ({:.2}m, {:.2}m)",
+                self.error[0], self.error[1]
+            ),
+            format!("{name} to actual: {:.2}m", self.distance),
+        ]
+    }
+}
+
+#[derive(Clone)]
 pub struct Transcript {
     steps: Vec<SensorInfo>,
     actual_ending_point: FloatPoint,
@@ -82,6 +102,14 @@ impl Transcript {
             .filter_map(|s| s.odometry())
             .map(|p| p.pos)
             .collect()
+    }
+
+    pub fn pose_to_actual(&self, pose: RobotPose<Radians>) -> PoseReport {
+        PoseReport {
+            pose,
+            error: self.error_to(pose.pos),
+            distance: self.actual().euclidean_distance(pose.pos),
+        }
     }
 }
 

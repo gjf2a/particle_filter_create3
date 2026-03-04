@@ -154,7 +154,12 @@ impl MainApp {
                 ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
                 let frontier = map.open_frontier_spaces();
                 let all_frontier = map.all_frontier_spaces();
-                ui.label(format!("open/all frontier/all space: {}/{}/{}", frontier.count_ones(), all_frontier.count_ones(), map.num_spaces()));
+                ui.label(format!(
+                    "open/all frontier/all space: {}/{}/{}",
+                    frontier.count_ones(),
+                    all_frontier.count_ones(),
+                    map.num_spaces()
+                ));
                 Self::render_map(ui, map, *pose, &frontier);
             }
         });
@@ -281,20 +286,20 @@ impl MainApp {
     fn render_results(ui: &mut Ui, results: &ConsistentData) {
         ui.vertical(|ui| {
             ui.label(format!("Actual position: {}", results.actual));
-            ui.label(format!("Odometry pose: {}", results.odometry_pose));
-            ui.label(format!("Odometry error: {}", results.odometry_error));
-            ui.label(format!(
-                "Odometry to actual: {:.2}m",
-                results.odometry_distance
-            ));
+            for line in results.odometry_report.report("Odometry") {
+                ui.label(line);
+            }
+            for line in results.best_particle_report.report("Best-particle") {
+                ui.label(line);
+            }
             match &results.outcome {
                 Estimate::Failure(failure_iteration) => {
                     ui.label(format!("Failure Iteration: {failure_iteration}"));
                 }
                 Estimate::Success(data) => {
-                    ui.label(format!("Particle pose: {}", data.closest_estimate));
-                    ui.label(format!("Particle error: {}", data.closest_error));
-                    ui.label(format!("Particle to actual: {:.2}m", data.estimate_to_actual));
+                    for line in data.closest_to_actual.report("Closest-particle") {
+                        ui.label(line);
+                    }
                     ui.label(format!(
                         "Farthest particle distance: {:.2}m",
                         data.farthest_to_actual

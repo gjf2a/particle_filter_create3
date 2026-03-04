@@ -2,11 +2,14 @@ use std::cmp::Ordering;
 
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    FloatPoint, Radians, RobotPose, consistent::{ConsistentMap, ConsistentParticleFilter, SelectionStrategy},
+    FloatPoint, Radians, RobotPose,
+    consistent::{ConsistentMap, ConsistentParticleFilter, SelectionStrategy},
 };
 
 use crate::{
-    Noises, grid_obstacles::{GridObstacles, GridObstaclesStats, Inconsistency}, odometry_transcripts::Transcript
+    Noises,
+    grid_obstacles::{GridObstacles, GridObstaclesStats, Inconsistency},
+    odometry_transcripts::{PoseReport, Transcript},
 };
 
 pub fn consistent_expr(
@@ -36,9 +39,7 @@ pub fn consistent_expr(
 
 #[derive(Clone)]
 pub struct SuccessData {
-    pub closest_estimate: RobotPose<Radians>,
-    pub closest_error: FloatPoint,
-    pub estimate_to_actual: f64,
+    pub closest_to_actual: PoseReport,
     pub map: GridObstacles,
     pub farthest_to_actual: f64,
 }
@@ -69,12 +70,9 @@ impl Estimate {
         if particle_filter.total_iterations() < transcript.len() {
             Self::Failure(particle_filter.total_iterations())
         } else {
-            let (closest_estimate, estimate_to_actual, map) =
-                closest_estimate(&transcript.actual(), &particle_filter);
+            let (closest_estimate, map) = closest_estimate(&transcript.actual(), &particle_filter);
             Self::Success(SuccessData {
-                closest_estimate,
-                closest_error: transcript.error_to(closest_estimate.pos),
-                estimate_to_actual,
+                closest_to_actual: transcript.pose_to_actual(closest_estimate),
                 map,
                 farthest_to_actual: farthest_estimate(&transcript.actual(), particle_filter),
             })
@@ -93,9 +91,8 @@ impl Estimate {
 pub struct ConsistentData {
     pub outcome: Estimate,
     pub actual: FloatPoint,
-    pub odometry_pose: RobotPose<Radians>,
-    pub odometry_error: FloatPoint,
-    pub odometry_distance: f64,
+    pub odometry_report: PoseReport,
+    pub best_particle_report: PoseReport,
     pub iterations_with_inconsistencies: usize,
     pub total_inconsistencies: usize,
     pub obstacle_space_issues: usize,
@@ -110,14 +107,12 @@ impl ConsistentData {
         stats: &GridObstaclesStats,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
+        let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
         Self {
             outcome: Estimate::new(transcript, particle_filter),
             actual: transcript.actual(),
-            odometry_pose: transcript.final_pose(),
-            odometry_error: transcript.error_robot_stop(),
-            odometry_distance: transcript
-                .error_robot_stop()
-                .euclidean_distance(FloatPoint::new([0.0, 0.0])),
+            odometry_report: transcript.pose_to_actual(transcript.final_pose()),
+            best_particle_report: transcript.pose_to_actual(best_pose),
             iterations_with_inconsistencies: iteration_inconsistencies.len(),
             total_inconsistencies: iteration_inconsistencies.total_count(),
             obstacle_space_issues: stats.total_for(&Inconsistency::ObstacleSpaceOverlap),
@@ -128,17 +123,20 @@ impl ConsistentData {
 
     pub fn print(&self) {
         println!("Actual position: {}", self.actual);
-        println!("Odometry pose: {}", self.odometry_pose);
-        println!("Odometry error: {}", self.odometry_error);
-        println!("Odometry to actual: {:.2}", self.odometry_distance);
+        for line in self.odometry_report.report("Odometry") {
+            println!("{line}");
+        }
+        for line in self.best_particle_report.report("Best-particle") {
+            println!("{line}");
+        }
         match &self.outcome {
             Estimate::Failure(failure_iteration) => {
                 println!("Failure Iteration: {failure_iteration}");
             }
             Estimate::Success(data) => {
-                println!("Particle pose: {}", data.closest_estimate);
-                println!("Particle error: {}", data.closest_error);
-                println!("Particle to actual: {:.2}", data.estimate_to_actual);
+                for line in data.closest_to_actual.report("Closest-particle") {
+                    println!("{line}");
+                }
                 println!("Dimensions: {} x {}", data.map.width(), data.map.height());
                 println!("Farthest particle distance: {}", data.farthest_to_actual);
             }
@@ -156,7 +154,7 @@ impl ConsistentData {
 pub fn closest_estimate<M: ConsistentMap>(
     actual: &FloatPoint,
     particles: &ConsistentParticleFilter<M>,
-) -> (RobotPose<Radians>, f64, M) {
+) -> (RobotPose<Radians>, M) {
     particles
         .particles()
         .map(|p| {
@@ -167,6 +165,7 @@ pub fn closest_estimate<M: ConsistentMap>(
             )
         })
         .min_by(|(_, dist1, _), (_, dist2, _)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .map(|(pose, _, map)| (pose, map))
         .unwrap()
 }
 
