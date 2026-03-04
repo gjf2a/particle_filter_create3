@@ -103,6 +103,7 @@ pub struct ConsistentData {
     pub obstacle_space_issues: usize,
     pub discontinuity_issues: usize,
     pub iteration_inconsistencies: HashHistogram<usize>,
+    pub particle_filter: ConsistentParticleFilter<GridObstacles>,
 }
 
 impl ConsistentData {
@@ -121,6 +122,7 @@ impl ConsistentData {
             obstacle_space_issues: stats.total_for(&Inconsistency::ObstacleSpaceOverlap),
             discontinuity_issues: stats.total_for(&Inconsistency::SeparatedSpaces),
             iteration_inconsistencies,
+            particle_filter: particle_filter.clone(),
         }
     }
 

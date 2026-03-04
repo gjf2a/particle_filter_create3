@@ -13,7 +13,7 @@ use particle_filter_create3::{
 };
 use std::{
     env,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -61,9 +61,9 @@ struct MainApp {
     obst_noise_theta: String,
     clear_noise_xy: String,
     clear_noise_theta: String,
-    last_progress: Option<(String, GridObstacles, RobotPose<Radians>)>,
-    progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
-    results: Arc<AtomicCell<Option<ConsistentData>>>,
+    progress: Arc<Mutex<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
+    results: Arc<Mutex<Option<ConsistentData>>>,
+    current_particle: Arc<AtomicCell<Option<usize>>>,
 }
 
 const FPS: f32 = 20.0;
@@ -79,9 +79,9 @@ impl eframe::App for MainApp {
             ));
             ui.horizontal(|ui| {
                 self.render_settings(ui);
-                if let Some(results) = self.results.take() {
-                    self.results.store(Some(results.clone()));
-                    Self::render_results(ui, &results);
+                let results = self.results.lock().unwrap();
+                if let Some(results) = &*results {
+                    Self::render_results(ui, results);
                 }
             });
             ctx.request_repaint_after_secs(FRAME_INTERVAL);
@@ -101,9 +101,9 @@ impl MainApp {
             clear_noise_theta: "2e-4".to_string(),
             obst_noise_xy: "0.032".to_string(),
             obst_noise_theta: "0.62".to_string(),
-            last_progress: None,
-            progress: Arc::new(AtomicCell::new(None)),
-            results: Arc::new(AtomicCell::new(None)),
+            progress: Arc::new(Mutex::new(None)),
+            results: Arc::new(Mutex::new(None)),
+            current_particle: Arc::new(AtomicCell::new(None)),
         }
     }
 
@@ -142,35 +142,56 @@ impl MainApp {
                 }
             }
 
-            if let Some(progress) = self.progress.take() {
-                self.last_progress = Some(progress);
-            }
-
-            self.render_progress(ui);
+            self.assess_progress(ui);
         });
     }
 
-    fn render_progress(&self, ui: &mut Ui) {
-        if let Some((progress, map, pose)) = &self.last_progress {
-            ui.label(progress);
-            ui.label(format!(
-                "{} x {} squares: {} words",
-                map.width(),
-                map.height(),
-                map.map_words_used()
-            ));
-            let whm = map.width_height_meters();
-            ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
-            let frontier = map.open_frontier_spaces();
-            let all_frontier = map.all_frontier_spaces();
-            ui.label(format!(
-                "open/all frontier/all space: {}/{}/{}",
-                frontier.count_ones(),
-                all_frontier.count_ones(),
-                map.num_spaces()
-            ));
-            Self::render_map(ui, map, *pose, &frontier);
+    fn assess_progress(&self, ui: &mut Ui) {
+        let progress = self.progress.lock().unwrap();
+
+        if let Some((msg, map, pose)) = &*progress {
+            let results = self.results.lock().unwrap();
+            if let Some(data) = &*results {
+                let num_particles = data.particle_filter.len();
+                if let Some(current_particle) = self.current_particle.load() {
+                    ui.horizontal(|ui| {
+                        if ui.button("<").clicked() {
+                            if current_particle == 0 {
+                                todo!("So much to clean up");                                
+                            }
+                        }
+                    });
+                }
+            } 
+            self.render_progress(ui, msg, map, pose);
         }
+    }
+
+    fn render_progress(
+        &self,
+        ui: &mut Ui,
+        msg: &str,
+        map: &GridObstacles,
+        pose: &RobotPose<Radians>,
+    ) {
+        ui.label(msg);
+        ui.label(format!(
+            "{} x {} squares: {} words",
+            map.width(),
+            map.height(),
+            map.map_words_used()
+        ));
+        let whm = map.width_height_meters();
+        ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
+        let frontier = map.open_frontier_spaces();
+        let all_frontier = map.all_frontier_spaces();
+        ui.label(format!(
+            "open/all frontier/all space: {}/{}/{}",
+            frontier.count_ones(),
+            all_frontier.count_ones(),
+            map.num_spaces()
+        ));
+        Self::render_map(ui, map, *pose, &frontier);
     }
 
     fn start(&self) -> anyhow::Result<()> {
@@ -183,8 +204,11 @@ impl MainApp {
             progress: self.progress.clone(),
             results: self.results.clone(),
         };
+        let current_particle = self.current_particle.clone();
         std::thread::spawn(move || {
+            current_particle.store(None);
             runner.run();
+            current_particle.store(Some(0));
         });
         Ok(())
     }
@@ -328,14 +352,17 @@ pub struct ParticleFilterRunner {
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
-    progress: Arc<AtomicCell<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
-    results: Arc<AtomicCell<Option<ConsistentData>>>,
+    progress: Arc<Mutex<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
+    results: Arc<Mutex<Option<ConsistentData>>>,
 }
 
 impl ParticleFilterRunner {
     pub fn run(&self) {
         let start = Instant::now();
-        self.results.store(None);
+        {
+            let mut results = self.results.lock().unwrap();
+            *results = None;
+        }
         let starting_map = GridObstacles::new(self.square_size_m, self.noises);
         let mut particle_filter = ConsistentParticleFilter::new(
             self.num_particles,
@@ -356,7 +383,8 @@ impl ParticleFilterRunner {
         }
         let stats = particle_filter.stats();
         let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
-        self.results.store(Some(packed_results));
+        let mut results = self.results.lock().unwrap();
+        *results = Some(packed_results);
     }
 
     pub fn send_progress(
@@ -372,6 +400,7 @@ impl ParticleFilterRunner {
             "{i}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)",
             self.transcript.len()
         );
-        self.progress.store(Some((msg, map.clone(), pose)));
+        let mut progress = self.progress.lock().unwrap();
+        *progress = Some((msg, map.clone(), pose));
     }
 }
