@@ -1,3 +1,4 @@
+use bit_grid::BitGrid;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Pos2, Rect, Ui, Vec2, Visuals};
 use particle_filter::{
@@ -10,7 +11,7 @@ use particle_filter_create3::{
     grid_obstacles::{Cell, GridObstacles},
     odometry_transcripts::Transcript,
 };
-use std::{collections::HashSet, env, sync::Arc, time::Instant};
+use std::{env, sync::Arc, time::Instant};
 
 const MAP_CELL_SIZE: f32 = 3.0;
 
@@ -153,7 +154,7 @@ impl MainApp {
                 ui.label(format!("{:.1}m x {:.1}m", whm[0], whm[1]));
                 let frontier = map.open_frontier_spaces();
                 let all_frontier = map.all_frontier_spaces();
-                ui.label(format!("open/all frontier/all space: {}/{}/{}", frontier.len(), all_frontier.len(), map.num_spaces()));
+                ui.label(format!("open/all frontier/all space: {}/{}/{}", frontier.count_ones(), all_frontier.count_ones(), map.num_spaces()));
                 Self::render_map(ui, map, *pose, &frontier);
             }
         });
@@ -324,7 +325,7 @@ impl MainApp {
         });
     }
 
-    fn render_map(ui: &mut Ui, map: &GridObstacles, pose: RobotPose<Radians>, frontier: &HashSet<(i64,i64)>) {
+    fn render_map(ui: &mut Ui, map: &GridObstacles, pose: RobotPose<Radians>, frontier: &BitGrid) {
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
                 map.width() as f32 * MAP_CELL_SIZE,
@@ -349,7 +350,7 @@ impl MainApp {
                 },
             );
             let fill_color = if cell == Cell::Space {
-                if frontier.contains(&(x, y)) {
+                if frontier.is_set(x, y) {
                     Color32::CYAN
                 } else if shadow.is_set(x, y) {
                     Color32::GRAY

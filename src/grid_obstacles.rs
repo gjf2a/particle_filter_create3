@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, f64::consts::PI, iter::repeat};
+use std::{collections::HashMap, f64::consts::PI, iter::repeat};
 
 use bit_grid::BitGrid;
 use eframe::egui::Color32;
@@ -153,11 +153,11 @@ impl GridObstacles {
     }
 
     pub fn num_obstacles(&self) -> u64 {
-        self.obstacles.count_bits_on()
+        self.obstacles.count_ones()
     }
 
     pub fn num_spaces(&self) -> u64 {
-        self.spaces.count_bits_on()
+        self.spaces.count_ones()
     }
 
     pub fn space_contiguous(&self) -> bool {
@@ -192,7 +192,7 @@ impl GridObstacles {
         }
     }
 
-    pub fn all_frontier_spaces(&self) -> HashSet<(i64, i64)> {
+    pub fn all_frontier_spaces(&self) -> BitGrid {
         let spaces_with_obstacles = self.spaces.union(&self.obstacles).unwrap();
         spaces_with_obstacles
             .ones_touching_zeros()
@@ -200,19 +200,18 @@ impl GridObstacles {
             .collect()
     }
 
-    pub fn open_frontier_spaces(&self) -> HashSet<(i64, i64)> {
+    pub fn open_frontier_spaces(&self) -> BitGrid {
         self.all_frontier_spaces()
-            .iter()
+            .ones()
             .filter(|(x, y)| {
                 let shadow = self.grid_shadow(Point::<i64, 2>::new([*x, *y]));
                 assert!(shadow.matching_dimensions(&self.obstacles));
                 shadow
                     .intersection(&self.obstacles)
                     .unwrap()
-                    .count_bits_on()
+                    .count_ones()
                     == 0
             })
-            .copied()
             .collect()
     }
 }

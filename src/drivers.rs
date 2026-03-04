@@ -44,9 +44,9 @@ pub struct SuccessData {
 }
 
 impl SuccessData {
-    pub fn all_and_open_frontier_counts(&self) -> (usize, usize, f64) {
-        let all_counts = self.map.all_frontier_spaces().len();
-        let open_counts = self.map.open_frontier_spaces().len();
+    pub fn all_and_open_frontier_counts(&self) -> (u64, u64, f64) {
+        let all_counts = self.map.all_frontier_spaces().count_ones();
+        let open_counts = self.map.open_frontier_spaces().count_ones();
         (
             all_counts,
             open_counts,
