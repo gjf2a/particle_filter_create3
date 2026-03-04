@@ -39,7 +39,9 @@ pub fn consistent_expr(
 
 #[derive(Clone)]
 pub struct SuccessData {
+    pub best_particle_to_actual: PoseReport,
     pub closest_to_actual: PoseReport,
+    pub closest_rank: usize,
     pub map: GridObstacles,
     pub farthest_to_actual: f64,
 }
@@ -70,9 +72,12 @@ impl Estimate {
         if particle_filter.total_iterations() < transcript.len() {
             Self::Failure(particle_filter.total_iterations())
         } else {
-            let (closest_estimate, map) = closest_estimate(&transcript.actual(), &particle_filter);
+            let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
+            let (closest_estimate, map, closest_rank) = closest_estimate(&transcript.actual(), &particle_filter);
             Self::Success(SuccessData {
+                best_particle_to_actual: transcript.pose_to_actual(best_pose),
                 closest_to_actual: transcript.pose_to_actual(closest_estimate),
+                closest_rank,
                 map,
                 farthest_to_actual: farthest_estimate(&transcript.actual(), particle_filter),
             })
@@ -92,7 +97,6 @@ pub struct ConsistentData {
     pub outcome: Estimate,
     pub actual: FloatPoint,
     pub odometry_report: PoseReport,
-    pub best_particle_report: PoseReport,
     pub iterations_with_inconsistencies: usize,
     pub total_inconsistencies: usize,
     pub obstacle_space_issues: usize,
@@ -107,12 +111,10 @@ impl ConsistentData {
         stats: &GridObstaclesStats,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
-        let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
         Self {
             outcome: Estimate::new(transcript, particle_filter),
             actual: transcript.actual(),
             odometry_report: transcript.pose_to_actual(transcript.final_pose()),
-            best_particle_report: transcript.pose_to_actual(best_pose),
             iterations_with_inconsistencies: iteration_inconsistencies.len(),
             total_inconsistencies: iteration_inconsistencies.total_count(),
             obstacle_space_issues: stats.total_for(&Inconsistency::ObstacleSpaceOverlap),
@@ -126,14 +128,14 @@ impl ConsistentData {
         for line in self.odometry_report.report("Odometry") {
             println!("{line}");
         }
-        for line in self.best_particle_report.report("Best-particle") {
-            println!("{line}");
-        }
         match &self.outcome {
             Estimate::Failure(failure_iteration) => {
                 println!("Failure Iteration: {failure_iteration}");
             }
             Estimate::Success(data) => {
+                for line in data.best_particle_to_actual.report("Best-particle") {
+                    println!("{line}");
+                }
                 for line in data.closest_to_actual.report("Closest-particle") {
                     println!("{line}");
                 }
@@ -154,18 +156,20 @@ impl ConsistentData {
 pub fn closest_estimate<M: ConsistentMap>(
     actual: &FloatPoint,
     particles: &ConsistentParticleFilter<M>,
-) -> (RobotPose<Radians>, M) {
+) -> (RobotPose<Radians>, M, usize) {
     particles
         .particles()
-        .map(|p| {
+        .enumerate()
+        .map(|(i, p)| {
             (
                 p.estimated_pose(),
                 p.estimated_pose().pos.euclidean_distance(*actual),
                 p.map().clone(),
+                i
             )
         })
-        .min_by(|(_, dist1, _), (_, dist2, _)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
-        .map(|(pose, _, map)| (pose, map))
+        .min_by(|(_, dist1, _, _), (_, dist2, _, _)| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
+        .map(|(pose, _, map, i)| (pose, map, i + 1))
         .unwrap()
 }
 

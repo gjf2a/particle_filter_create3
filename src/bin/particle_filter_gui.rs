@@ -289,14 +289,15 @@ impl MainApp {
             for line in results.odometry_report.report("Odometry") {
                 ui.label(line);
             }
-            for line in results.best_particle_report.report("Best-particle") {
-                ui.label(line);
-            }
             match &results.outcome {
                 Estimate::Failure(failure_iteration) => {
                     ui.label(format!("Failure Iteration: {failure_iteration}"));
                 }
                 Estimate::Success(data) => {
+                    for line in data.best_particle_to_actual.report("Best-particle") {
+                        ui.label(line);
+                    }
+                    ui.label(format!("Closest-particle rank: {}", data.closest_rank));
                     for line in data.closest_to_actual.report("Closest-particle") {
                         ui.label(line);
                     }
