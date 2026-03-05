@@ -1,5 +1,4 @@
 use bit_grid::BitGrid;
-use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 use particle_filter::{
     Degrees, Noise, Radians, RobotPose,
@@ -61,9 +60,16 @@ struct MainApp {
     obst_noise_theta: String,
     clear_noise_xy: String,
     clear_noise_theta: String,
-    progress: Arc<Mutex<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
-    results: Arc<Mutex<Option<ConsistentData>>>,
-    current_particle: Arc<AtomicCell<Option<usize>>>,
+    status: Arc<Mutex<Option<CurrentData>>>,
+}
+
+#[derive(Clone)]
+struct CurrentData {
+    message: String,
+    map: GridObstacles,
+    pose: RobotPose<Radians>,
+    results: Option<ConsistentData>,
+    current_particle: usize,
 }
 
 const FPS: f32 = 20.0;
@@ -79,9 +85,11 @@ impl eframe::App for MainApp {
             ));
             ui.horizontal(|ui| {
                 self.render_settings(ui);
-                let results = self.results.lock().unwrap();
-                if let Some(results) = &*results {
-                    Self::render_results(ui, results);
+                let status = self.status.lock().unwrap();
+                if let Some(status) = &*status {
+                    if let Some(results) = &status.results {
+                        Self::render_results(ui, results);
+                    }
                 }
             });
             ctx.request_repaint_after_secs(FRAME_INTERVAL);
@@ -101,9 +109,7 @@ impl MainApp {
             clear_noise_theta: "2e-4".to_string(),
             obst_noise_xy: "0.032".to_string(),
             obst_noise_theta: "0.62".to_string(),
-            progress: Arc::new(Mutex::new(None)),
-            results: Arc::new(Mutex::new(None)),
-            current_particle: Arc::new(AtomicCell::new(None)),
+            status: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -147,23 +153,36 @@ impl MainApp {
     }
 
     fn assess_progress(&self, ui: &mut Ui) {
-        let progress = self.progress.lock().unwrap();
-
-        if let Some((msg, map, pose)) = &*progress {
-            let results = self.results.lock().unwrap();
-            if let Some(data) = &*results {
+        let mut status = self.status.lock().unwrap();
+        if let Some(status) = &mut *status {
+            if let Some(data) = &status.results {
                 let num_particles = data.particle_filter.len();
-                if let Some(current_particle) = self.current_particle.load() {
-                    ui.horizontal(|ui| {
-                        if ui.button("<").clicked() {
-                            if current_particle == 0 {
-                                todo!("So much to clean up");                                
-                            }
+                ui.horizontal(|ui| {
+                    if ui.button("<").clicked() {
+                        if status.current_particle == 0 {
+                            status.current_particle = num_particles - 1;
+                        } else {
+                            status.current_particle -= 1;
                         }
-                    });
-                }
-            } 
-            self.render_progress(ui, msg, map, pose);
+                    }
+                    ui.label(format!("{}", status.current_particle));
+                    if ui.button(">").clicked() {
+                        let right = status.current_particle + 1;
+                        status.current_particle = if right == num_particles {0} else {right};
+                    }
+                });
+                let msg = match data.outcome {
+                    Estimate::Failure(step) => {
+                        format!("Failed at step {step}")
+                    }
+                    Estimate::Success(_) => {
+                        format!("Success")
+                    }
+                };
+                self.render_progress(ui, msg.as_str(), data.particle_filter[status.current_particle].map(), &data.particle_filter[status.current_particle].estimated_pose());
+            } else {
+                self.render_progress(ui, &status.message, &status.map, &status.pose);
+            }
         }
     }
 
@@ -201,14 +220,10 @@ impl MainApp {
             square_size_m: self.m_per_square.parse::<f64>()?,
             noises: self.noises_from_ui()?,
             num_particles: self.num_particles.parse::<usize>()?,
-            progress: self.progress.clone(),
-            results: self.results.clone(),
+            status: self.status.clone(),
         };
-        let current_particle = self.current_particle.clone();
         std::thread::spawn(move || {
-            current_particle.store(None);
             runner.run();
-            current_particle.store(Some(0));
         });
         Ok(())
     }
@@ -352,16 +367,17 @@ pub struct ParticleFilterRunner {
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
-    progress: Arc<Mutex<Option<(String, GridObstacles, RobotPose<Radians>)>>>,
-    results: Arc<Mutex<Option<ConsistentData>>>,
+    status: Arc<Mutex<Option<CurrentData>>>,
 }
 
 impl ParticleFilterRunner {
     pub fn run(&self) {
         let start = Instant::now();
         {
-            let mut results = self.results.lock().unwrap();
-            *results = None;
+            let mut status = self.status.lock().unwrap();
+            if let Some(status) = &mut *status {
+                status.results = None;
+            }
         }
         let starting_map = GridObstacles::new(self.square_size_m, self.noises);
         let mut particle_filter = ConsistentParticleFilter::new(
@@ -383,8 +399,10 @@ impl ParticleFilterRunner {
         }
         let stats = particle_filter.stats();
         let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
-        let mut results = self.results.lock().unwrap();
-        *results = Some(packed_results);
+        let mut status = self.status.lock().unwrap();
+        if let Some(status) = &mut *status {
+            status.results = Some(packed_results);
+        }
     }
 
     pub fn send_progress(
@@ -396,11 +414,18 @@ impl ParticleFilterRunner {
     ) {
         let elapsed = elapsed.as_secs_f64();
         let iteration = 1000.0 * elapsed / i as f64;
-        let msg = format!(
+        let message = format!(
             "{i}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)",
             self.transcript.len()
         );
-        let mut progress = self.progress.lock().unwrap();
-        *progress = Some((msg, map.clone(), pose));
+        let mut status = self.status.lock().unwrap();
+        let results = status.as_ref().and_then(|s| s.results.clone());
+        *status = Some(CurrentData {
+            message,
+            map: map.clone(),
+            pose,
+            results,
+            current_particle: 0,
+        });
     }
 }
