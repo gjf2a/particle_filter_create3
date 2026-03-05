@@ -156,34 +156,47 @@ impl MainApp {
         let mut status = self.status.lock().unwrap();
         if let Some(status) = &mut *status {
             if let Some(data) = &status.results {
-                let num_particles = data.particle_filter.len();
-                ui.horizontal(|ui| {
-                    if ui.button("<").clicked() {
-                        if status.current_particle == 0 {
-                            status.current_particle = num_particles - 1;
-                        } else {
-                            status.current_particle -= 1;
-                        }
-                    }
-                    ui.label(format!("{}", status.current_particle));
-                    if ui.button(">").clicked() {
-                        let right = status.current_particle + 1;
-                        status.current_particle = if right == num_particles {0} else {right};
-                    }
-                });
-                let msg = match data.outcome {
-                    Estimate::Failure(step) => {
-                        format!("Failed at step {step}")
-                    }
-                    Estimate::Success(_) => {
-                        format!("Success")
-                    }
-                };
-                self.render_progress(ui, msg.as_str(), data.particle_filter[status.current_particle].map(), &data.particle_filter[status.current_particle].estimated_pose());
+                self.render_completed(ui, &data.clone(), status);
             } else {
                 self.render_progress(ui, &status.message, &status.map, &status.pose);
             }
         }
+    }
+
+    fn render_completed(&self, ui: &mut Ui, data: &ConsistentData, status: &mut CurrentData) {
+        let num_particles = data.particle_filter.len();
+        let msg = match data.outcome {
+            Estimate::Failure(step) => {
+                format!("Failed at step {step}")
+            }
+            Estimate::Success(_) => {
+                Self::render_map_selector(ui, status, num_particles); 
+                format!("Success")
+            }
+        };
+        self.render_progress(
+            ui,
+            msg.as_str(),
+            data.particle_filter[status.current_particle].map(),
+            &data.particle_filter[status.current_particle].estimated_pose(),
+        );
+    }
+
+    fn render_map_selector(ui: &mut Ui, status: &mut CurrentData, num_particles: usize) {
+        ui.horizontal(|ui| {
+            if ui.button("<").clicked() {
+                if status.current_particle == 0 {
+                    status.current_particle = num_particles - 1;
+                } else {
+                    status.current_particle -= 1;
+                }
+            }
+            ui.label(format!("{}", status.current_particle + 1));
+            if ui.button(">").clicked() {
+                let right = status.current_particle + 1;
+                status.current_particle = if right == num_particles { 0 } else { right };
+            }
+        });
     }
 
     fn render_progress(
@@ -373,12 +386,7 @@ pub struct ParticleFilterRunner {
 impl ParticleFilterRunner {
     pub fn run(&self) {
         let start = Instant::now();
-        {
-            let mut status = self.status.lock().unwrap();
-            if let Some(status) = &mut *status {
-                status.results = None;
-            }
-        }
+        self.reset_status();
         let starting_map = GridObstacles::new(self.square_size_m, self.noises);
         let mut particle_filter = ConsistentParticleFilter::new(
             self.num_particles,
@@ -397,6 +405,17 @@ impl ParticleFilterRunner {
                 break;
             }
         }
+        self.completion_status(&particle_filter);
+    }
+
+    fn reset_status(&self) {
+        let mut status = self.status.lock().unwrap();
+        if let Some(status) = &mut *status {
+            status.results = None;
+        }
+    }
+
+    fn completion_status(&self, particle_filter: &ConsistentParticleFilter<GridObstacles>) {
         let stats = particle_filter.stats();
         let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
         let mut status = self.status.lock().unwrap();
