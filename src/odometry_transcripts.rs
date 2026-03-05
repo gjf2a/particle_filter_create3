@@ -3,9 +3,13 @@ use std::{
     io::{BufRead, BufReader},
 };
 
-use particle_filter::{BoundingBox, FloatPoint, Radians, RobotPose};
-
 const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
+
+use bit_grid::{
+    angle::Radians,
+    point::{BoundingBox, FloatPoint},
+    pose::RobotPose,
+};
 
 use crate::SensorInfo;
 
@@ -96,7 +100,7 @@ impl Transcript {
             * CREATE3_ODOMETRY_UPDATE_INTERVAL
     }
 
-    pub fn bounding_box(&self) -> BoundingBox {
+    pub fn bounding_box(&self) -> BoundingBox<f64> {
         self.steps
             .iter()
             .filter_map(|s| s.odometry())

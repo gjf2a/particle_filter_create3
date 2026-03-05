@@ -1,9 +1,12 @@
-use bit_grid::BitGrid;
-use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
-use particle_filter::{
-    Degrees, Noise, Radians, RobotPose,
-    consistent::{ConsistentParticleFilter, SelectionStrategy},
+use bit_grid::{
+    BitGrid,
+    angle::{Degrees, Radians},
+    point::GridPoint,
+    pose::RobotPose,
 };
+use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
+
+use particle_filter::{ConsistentParticleFilter, Noise, SelectionStrategy};
 use particle_filter_create3::{
     Noises,
     drivers::{ConsistentData, Estimate},
@@ -170,7 +173,7 @@ impl MainApp {
                 format!("Failed at step {step}")
             }
             Estimate::Success(_) => {
-                Self::render_map_selector(ui, status, num_particles); 
+                Self::render_map_selector(ui, status, num_particles);
                 format!("Success")
             }
         };
@@ -291,11 +294,11 @@ impl MainApp {
         );
         let shadow = map.robot_shadow(pose);
         let response_rect = response.rect;
-        let (min_x, min_y) = map.upper_left_x_y();
-        for (x, y, cell) in map.points() {
-            let x_rect = ((x - min_x) as f32) * MAP_CELL_SIZE + response_rect.left();
-            let y_rect = ((y - min_y) as f32) * MAP_CELL_SIZE + response_rect.top();
-            let color = cell_color(frontier, &shadow, cell, x, y);
+        let bb = map.bounding_box();
+        for (p, cell) in map.points() {
+            let x_rect = ((p[0] - bb.min_x()) as f32) * MAP_CELL_SIZE + response_rect.left();
+            let y_rect = ((p[1] - bb.min_y()) as f32) * MAP_CELL_SIZE + response_rect.top();
+            let color = cell_color(frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
     }
@@ -315,11 +318,11 @@ fn paint_cell(painter: &Painter, x_rect: f32, y_rect: f32, color: Color32) {
     painter.rect_filled(rect, CornerRadius::ZERO, color);
 }
 
-fn cell_color(frontier: &BitGrid, shadow: &BitGrid, cell: Cell, x: i64, y: i64) -> Color32 {
+fn cell_color(frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) -> Color32 {
     if cell == Cell::Space {
-        if frontier.is_set(x, y) {
+        if frontier.get(&p) {
             Color32::CYAN
-        } else if shadow.is_set(x, y) {
+        } else if shadow.get(&p) {
             Color32::GRAY
         } else {
             cell.color()

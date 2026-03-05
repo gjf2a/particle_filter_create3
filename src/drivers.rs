@@ -1,10 +1,8 @@
 use std::cmp::Ordering;
 
+use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
-use particle_filter::{
-    FloatPoint, Radians, RobotPose,
-    consistent::{ConsistentMap, ConsistentParticleFilter, SelectionStrategy},
-};
+use particle_filter::{ConsistentMap, ConsistentParticleFilter, SelectionStrategy};
 
 use crate::{
     Noises,

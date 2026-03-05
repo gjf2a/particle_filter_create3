@@ -2,8 +2,10 @@ pub mod drivers;
 pub mod grid_obstacles;
 pub mod odometry_transcripts;
 
-use particle_filter::{FloatPoint, Noise, Radians, RobotPose};
 use std::{f64::consts::PI, fmt::Display, str::FromStr};
+
+use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
+use particle_filter::Noise;
 
 pub const CREATE3_RADIUS: f64 = 0.2032; // meters
 
