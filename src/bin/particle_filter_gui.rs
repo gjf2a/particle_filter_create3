@@ -168,24 +168,24 @@ impl MainApp {
 
     fn render_completed(&self, ui: &mut Ui, data: &ConsistentData, status: &mut CurrentData) {
         let num_particles = data.particle_filter.len();
-        let msg = match data.outcome {
-            Estimate::Failure(step) => {
-                format!("Failed at step {step}")
+        let msg = match &data.outcome {
+            Estimate::Failure(_) => {
+                format!("Failed")
             }
-            Estimate::Success(_) => {
-                Self::render_map_selector(ui, status, num_particles);
+            Estimate::Success(estimate) => {
+                Self::render_map_selector(ui, status, num_particles, estimate.closest_rank);
                 format!("Success")
             }
         };
         self.render_progress(
             ui,
-            msg.as_str(),
+            format!("{msg} {}", status.message).as_str(),
             data.particle_filter[status.current_particle].map(),
             &data.particle_filter[status.current_particle].estimated_pose(),
         );
     }
 
-    fn render_map_selector(ui: &mut Ui, status: &mut CurrentData, num_particles: usize) {
+    fn render_map_selector(ui: &mut Ui, status: &mut CurrentData, num_particles: usize, closest_rank: usize) {
         ui.horizontal(|ui| {
             if ui.button("<").clicked() {
                 if status.current_particle == 0 {
@@ -198,6 +198,12 @@ impl MainApp {
             if ui.button(">").clicked() {
                 let right = status.current_particle + 1;
                 status.current_particle = if right == num_particles { 0 } else { right };
+            }
+            if ui.button("Closest").clicked() {
+                status.current_particle = closest_rank - 1;                
+            }
+            if ui.button("Best").clicked() {
+                status.current_particle = 0;
             }
         });
     }
@@ -287,8 +293,8 @@ impl MainApp {
     fn render_map(ui: &mut Ui, map: &GridObstacles, pose: RobotPose<Radians>, frontier: &BitGrid) {
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
-                map.width() as f32 * MAP_CELL_SIZE,
                 map.height() as f32 * MAP_CELL_SIZE,
+                map.width() as f32 * MAP_CELL_SIZE,
             ),
             egui::Sense::hover(),
         );
@@ -296,8 +302,8 @@ impl MainApp {
         let response_rect = response.rect;
         let bb = map.bounding_box();
         for (p, cell) in map.points() {
-            let x_rect = ((p[0] - bb.min_x()) as f32) * MAP_CELL_SIZE + response_rect.left();
-            let y_rect = ((p[1] - bb.min_y()) as f32) * MAP_CELL_SIZE + response_rect.top();
+            let x_rect = ((p[1] - bb.min_y()) as f32) * MAP_CELL_SIZE + response_rect.left();
+            let y_rect = ((p[0] - bb.min_x()) as f32) * MAP_CELL_SIZE + response_rect.top();
             let color = cell_color(frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
@@ -437,7 +443,7 @@ impl ParticleFilterRunner {
         let elapsed = elapsed.as_secs_f64();
         let iteration = 1000.0 * elapsed / i as f64;
         let message = format!(
-            "{i}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)",
+            "{}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)", i + 1,
             self.transcript.len()
         );
         let mut status = self.status.lock().unwrap();
