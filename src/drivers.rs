@@ -56,44 +56,29 @@ impl SuccessData {
     }
 }
 
-#[derive(Clone)]
-pub enum Estimate {
-    Failure(usize),
-    Success(SuccessData),
-}
-
-impl Estimate {
-    pub fn new(
-        transcript: &Transcript,
-        particle_filter: &ConsistentParticleFilter<GridObstacles>,
-    ) -> Self {
-        if particle_filter.total_iterations() < transcript.len() {
-            Self::Failure(particle_filter.total_iterations())
-        } else {
-            let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
-            let (closest_estimate, map, closest_rank) =
-                closest_estimate(&transcript.actual(), &particle_filter);
-            Self::Success(SuccessData {
-                best_particle_to_actual: transcript.pose_to_actual(best_pose),
-                closest_to_actual: transcript.pose_to_actual(closest_estimate),
-                closest_rank,
-                map,
-                farthest_to_actual: farthest_estimate(&transcript.actual(), particle_filter),
-            })
-        }
-    }
-
-    pub fn option(&self) -> Option<SuccessData> {
-        match self {
-            Estimate::Failure(_) => None,
-            Estimate::Success(success_data) => Some(success_data.clone()),
-        }
+fn get_success_data(
+    transcript: &Transcript,
+    particle_filter: &ConsistentParticleFilter<GridObstacles>,
+) -> Option<SuccessData> {
+    if particle_filter.total_iterations() < transcript.len() {
+        None
+    } else {
+        let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
+        let (closest_estimate, map, closest_rank) =
+            closest_estimate(&transcript.actual(), &particle_filter);
+        Some(SuccessData {
+            best_particle_to_actual: transcript.pose_to_actual(best_pose),
+            closest_to_actual: transcript.pose_to_actual(closest_estimate),
+            closest_rank,
+            map,
+            farthest_to_actual: farthest_estimate(&transcript.actual(), particle_filter),
+        })
     }
 }
 
 #[derive(Clone)]
 pub struct ConsistentData {
-    pub outcome: Estimate,
+    pub outcome: Option<SuccessData>,
     pub actual: FloatPoint,
     pub odometry_report: PoseReport,
     pub iterations_with_inconsistencies: usize,
@@ -112,7 +97,7 @@ impl ConsistentData {
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
         Self {
-            outcome: Estimate::new(transcript, particle_filter),
+            outcome: get_success_data(transcript, particle_filter),
             actual: transcript.actual(),
             odometry_report: transcript.pose_to_actual(transcript.final_pose()),
             iterations_with_inconsistencies: iteration_inconsistencies.len(),
@@ -130,10 +115,10 @@ impl ConsistentData {
             println!("{line}");
         }
         match &self.outcome {
-            Estimate::Failure(failure_iteration) => {
-                println!("Failure Iteration: {failure_iteration}");
+            None => {
+                println!("Failure");
             }
-            Estimate::Success(data) => {
+            Some(data) => {
                 for line in data.best_particle_to_actual.report("Best-particle") {
                     println!("{line}");
                 }

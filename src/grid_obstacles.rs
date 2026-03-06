@@ -5,8 +5,7 @@ use bit_grid::{
     angle::Radians,
     point::{BoundingBox, FloatPoint, GridPoint, Point},
     pose::RobotPose,
-    pt,
-    span
+    pt, span,
 };
 use eframe::egui::Color32;
 use enum_iterator::{Sequence, all};
@@ -120,7 +119,9 @@ impl GridObstacles {
     }
 
     pub fn bounding_box(&self) -> BoundingBox<i64> {
-        self.spaces.bounding_box().merge(self.obstacles.bounding_box())
+        self.spaces
+            .bounding_box()
+            .merge(self.obstacles.bounding_box())
     }
 
     pub fn width(&self) -> i64 {

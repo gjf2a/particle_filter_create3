@@ -9,7 +9,7 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 use particle_filter::{ConsistentParticleFilter, Noise, SelectionStrategy};
 use particle_filter_create3::{
     Noises,
-    drivers::{ConsistentData, Estimate},
+    drivers::{ConsistentData, SuccessData},
     grid_obstacles::{Cell, GridObstacles},
     odometry_transcripts::Transcript,
 };
@@ -169,10 +169,8 @@ impl MainApp {
     fn render_completed(&self, ui: &mut Ui, data: &ConsistentData, status: &mut CurrentData) {
         let num_particles = data.particle_filter.len();
         let msg = match &data.outcome {
-            Estimate::Failure(_) => {
-                format!("Failed")
-            }
-            Estimate::Success(estimate) => {
+            None => format!("Failed"),
+            Some(estimate) => {
                 Self::render_map_selector(ui, status, num_particles, estimate.closest_rank);
                 format!("Success")
             }
@@ -185,7 +183,12 @@ impl MainApp {
         );
     }
 
-    fn render_map_selector(ui: &mut Ui, status: &mut CurrentData, num_particles: usize, closest_rank: usize) {
+    fn render_map_selector(
+        ui: &mut Ui,
+        status: &mut CurrentData,
+        num_particles: usize,
+        closest_rank: usize,
+    ) {
         ui.horizontal(|ui| {
             if ui.button("<").clicked() {
                 if status.current_particle == 0 {
@@ -200,7 +203,7 @@ impl MainApp {
                 status.current_particle = if right == num_particles { 0 } else { right };
             }
             if ui.button("Closest").clicked() {
-                status.current_particle = closest_rank - 1;                
+                status.current_particle = closest_rank - 1;
             }
             if ui.button("Best").clicked() {
                 status.current_particle = 0;
@@ -338,12 +341,12 @@ fn cell_color(frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) ->
     }
 }
 
-fn render_outcome(ui: &mut Ui, outcome: &Estimate) {
+fn render_outcome(ui: &mut Ui, outcome: &Option<SuccessData>) {
     match outcome {
-        Estimate::Failure(failure_iteration) => {
-            ui.label(format!("Failure Iteration: {failure_iteration}"));
+        None => {
+            ui.label(format!("Failure"));
         }
-        Estimate::Success(data) => {
+        Some(data) => {
             for line in data.best_particle_to_actual.report("Best-particle") {
                 ui.label(line);
             }
@@ -443,7 +446,8 @@ impl ParticleFilterRunner {
         let elapsed = elapsed.as_secs_f64();
         let iteration = 1000.0 * elapsed / i as f64;
         let message = format!(
-            "{}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)", i + 1,
+            "{}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)",
+            i + 1,
             self.transcript.len()
         );
         let mut status = self.status.lock().unwrap();
