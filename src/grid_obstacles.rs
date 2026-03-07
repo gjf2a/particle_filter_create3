@@ -1,11 +1,7 @@
 use std::collections::HashMap;
 
 use bit_grid::{
-    BitGrid,
-    angle::Radians,
-    point::{BoundingBox, FloatPoint, GridPoint, Point},
-    pose::RobotPose,
-    pt, span,
+    BitGrid, ColumnMajorCoordIter, angle::Radians, point::{BoundingBox, FloatPoint, GridPoint, Point}, pose::RobotPose, pt, span
 };
 use eframe::egui::Color32;
 use enum_iterator::{Sequence, all};
@@ -63,8 +59,9 @@ pub struct GridObstacles {
 impl GridObstacles {
     fn create_shadow(square_size_m: f64) -> BitGrid {
         let grid_radius = to_square(square_size_m, CREATE3_RADIUS);
-        let mut shadow = BitGrid::new(-grid_radius, grid_radius, -grid_radius, grid_radius);
-        for coord in shadow.coord_iter() {
+        let grid_diameter = grid_radius * 2 + 1;
+        let mut shadow = BitGrid::default();
+        for coord in ColumnMajorCoordIter::new(-grid_radius, -grid_radius, grid_diameter, grid_diameter) {
             let float = to_float_point(square_size_m, coord);
             if float.euclidean_distance(pt!(0.0, 0.0)) < CREATE3_RADIUS {
                 shadow.set(coord, true);
@@ -126,12 +123,12 @@ impl GridObstacles {
 
     pub fn width(&self) -> i64 {
         let bb = self.bounding_box();
-        span(bb.min_x(), bb.max_x())
+        span(bb.min()[0], bb.max()[0])
     }
 
     pub fn height(&self) -> i64 {
         let bb = self.bounding_box();
-        span(bb.min_y(), bb.max_y())
+        span(bb.min()[1], bb.max()[1])
     }
 
     fn grid_index_unchecked(&self, pos: FloatPoint) -> GridPoint {
@@ -156,7 +153,7 @@ impl GridObstacles {
         self.shadow.translated(grid_point)
     }
 
-    pub fn draw_overlapping_shadow_on(&mut self, grid_point: GridPoint) -> bool {
+    fn draw_overlapping_shadow_on(&mut self, grid_point: GridPoint) -> bool {
         let mut overlapping = false;
         for p in self.grid_shadow(grid_point).ones() {
             overlapping |= self.spaces.get(&p);
@@ -308,9 +305,7 @@ impl Default for GridObstaclesStats {
 #[cfg(test)]
 mod tests {
     use bit_grid::{
-        angle::Radians,
-        point::{FloatPoint, Point},
-        pose::RobotPose,
+        point::{GridPoint, Point},
         pt,
     };
 
@@ -319,21 +314,14 @@ mod tests {
     #[test]
     fn test_shadow() {
         let mut tester = GridObstacles::new(0.1, Noises::default());
-        let size = 3;
-        tester.obstacles.set(pt!(size, size), false);
-        tester.obstacles.set(pt!(-size, -size), false);
-        let pose = RobotPose::<Radians> {
-            pos: FloatPoint::new([0.0, 0.0]),
-            theta: Radians::new(0.0),
-        };
-        let shadow = tester.robot_shadow(pose);
+        let shadow = tester.grid_shadow(GridPoint::default());
         let expected = "00100\n01110\n11111\n01110\n00100";
         let shadow_str = format!("{shadow}");
         assert_eq!(expected, shadow_str);
 
-        tester.obstacles.set(pt!(0, 0), true);
-        tester.obstacles.set(pt!(-2, -1), true);
-        tester.obstacles.set(pt!(-2, 0), true);
+        tester.obstacles = [pt!(0, 0), pt!(-2, -1), pt!(-2, 0)].iter().collect();
+        let intersected = &tester.obstacles & &shadow;
+        assert_eq!(intersected.count_ones(), 2);
 
         let intersected = tester.obstacles.overlapping_counts(&shadow);
         assert_eq!(intersected, 2);

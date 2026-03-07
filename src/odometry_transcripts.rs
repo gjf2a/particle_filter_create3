@@ -100,7 +100,7 @@ impl Transcript {
             * CREATE3_ODOMETRY_UPDATE_INTERVAL
     }
 
-    pub fn bounding_box(&self) -> BoundingBox<f64> {
+    pub fn bounding_box(&self) -> Option<BoundingBox<f64>> {
         self.steps
             .iter()
             .filter_map(|s| s.odometry())

@@ -305,8 +305,8 @@ impl MainApp {
         let response_rect = response.rect;
         let bb = map.bounding_box();
         for (p, cell) in map.points() {
-            let x_rect = ((p[1] - bb.min_y()) as f32) * MAP_CELL_SIZE + response_rect.left();
-            let y_rect = ((p[0] - bb.min_x()) as f32) * MAP_CELL_SIZE + response_rect.top();
+            let x_rect = ((p[1] - bb.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
+            let y_rect = ((p[0] - bb.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
             let color = cell_color(frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
