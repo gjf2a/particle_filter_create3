@@ -2,12 +2,10 @@ use std::cmp::Ordering;
 
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
-use particle_filter::{ConsistentMap, ConsistentParticleFilter, SelectionStrategy};
+use particle_filter::{ConsistentParticleFilter, RobotInfo, SelectionStrategy, bit_grid_map::{BitGridMap, BitGridStats, Inconsistency}};
 
 use crate::{
-    Noises,
-    grid_obstacles::{GridObstacles, GridObstaclesStats, Inconsistency},
-    odometry_transcripts::{PoseReport, Transcript},
+    Create3Info, Noises, odometry_transcripts::{PoseReport, Transcript}
 };
 
 pub fn consistent_expr(
@@ -15,11 +13,11 @@ pub fn consistent_expr(
     noises: Noises,
     num_particles: usize,
     transcript: &Transcript,
-) -> ConsistentParticleFilter<GridObstacles> {
-    let starting_map = GridObstacles::new(square_size_m, noises);
+) -> ConsistentParticleFilter<Create3Info> {
     let mut particle_filter = ConsistentParticleFilter::new(
         num_particles,
-        &starting_map,
+        square_size_m,
+        &Create3Info::new(noises),
         SelectionStrategy::DistanceWeight,
     );
     for (i, sensor_info) in transcript.iter().enumerate() {
@@ -40,7 +38,7 @@ pub struct SuccessData {
     pub best_particle_to_actual: PoseReport,
     pub closest_to_actual: PoseReport,
     pub closest_rank: usize,
-    pub map: GridObstacles,
+    pub map: BitGridMap,
     pub farthest_to_actual: f64,
 }
 
@@ -58,7 +56,7 @@ impl SuccessData {
 
 fn get_success_data(
     transcript: &Transcript,
-    particle_filter: &ConsistentParticleFilter<GridObstacles>,
+    particle_filter: &ConsistentParticleFilter<Create3Info>,
 ) -> Option<SuccessData> {
     if particle_filter.total_iterations() < transcript.len() {
         None
@@ -86,14 +84,14 @@ pub struct ConsistentData {
     pub obstacle_space_issues: usize,
     pub discontinuity_issues: usize,
     pub iteration_inconsistencies: HashHistogram<usize>,
-    pub particle_filter: ConsistentParticleFilter<GridObstacles>,
+    pub particle_filter: ConsistentParticleFilter<Create3Info>,
 }
 
 impl ConsistentData {
     pub fn new(
         transcript: &Transcript,
-        particle_filter: &ConsistentParticleFilter<GridObstacles>,
-        stats: &GridObstaclesStats,
+        particle_filter: &ConsistentParticleFilter<Create3Info>,
+        stats: &BitGridStats,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
         Self {
@@ -139,10 +137,10 @@ impl ConsistentData {
     }
 }
 
-pub fn closest_estimate<M: ConsistentMap>(
+pub fn closest_estimate<R: RobotInfo>(
     actual: &FloatPoint,
-    particles: &ConsistentParticleFilter<M>,
-) -> (RobotPose<Radians>, M, usize) {
+    particles: &ConsistentParticleFilter<R>,
+) -> (RobotPose<Radians>, BitGridMap, usize) {
     particles
         .particles()
         .enumerate()
@@ -161,9 +159,9 @@ pub fn closest_estimate<M: ConsistentMap>(
         .unwrap()
 }
 
-pub fn farthest_estimate<M: ConsistentMap>(
+pub fn farthest_estimate<R: RobotInfo>(
     actual: &FloatPoint,
-    particles: &ConsistentParticleFilter<M>,
+    particles: &ConsistentParticleFilter<R>,
 ) -> f64 {
     particles
         .particles()

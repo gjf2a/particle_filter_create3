@@ -6,12 +6,9 @@ use bit_grid::{
 };
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 
-use particle_filter::{ConsistentParticleFilter, Noise, SelectionStrategy};
+use particle_filter::{ConsistentParticleFilter, Noise, SelectionStrategy, bit_grid_map::{BitGridMap, Cell}};
 use particle_filter_create3::{
-    Noises,
-    drivers::{ConsistentData, SuccessData},
-    grid_obstacles::{Cell, GridObstacles, cell2color},
-    odometry_transcripts::Transcript,
+    Create3Info, Noises, cell2color, drivers::{ConsistentData, SuccessData}, odometry_transcripts::Transcript
 };
 use std::{
     env,
@@ -69,7 +66,7 @@ struct MainApp {
 #[derive(Clone)]
 struct CurrentData {
     message: String,
-    map: GridObstacles,
+    map: BitGridMap,
     pose: RobotPose<Radians>,
     results: Option<ConsistentData>,
     current_particle: usize,
@@ -215,7 +212,7 @@ impl MainApp {
         &self,
         ui: &mut Ui,
         msg: &str,
-        map: &GridObstacles,
+        map: &BitGridMap,
         pose: &RobotPose<Radians>,
     ) {
         ui.label(msg);
@@ -293,7 +290,7 @@ impl MainApp {
         });
     }
 
-    fn render_map(ui: &mut Ui, map: &GridObstacles, pose: RobotPose<Radians>, frontier: &BitGrid) {
+    fn render_map(ui: &mut Ui, map: &BitGridMap, pose: RobotPose<Radians>, frontier: &BitGrid) {
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
                 map.height() as f32 * MAP_CELL_SIZE,
@@ -399,10 +396,10 @@ impl ParticleFilterRunner {
     pub fn run(&self) {
         let start = Instant::now();
         self.reset_status();
-        let starting_map = GridObstacles::new(self.square_size_m, self.noises);
         let mut particle_filter = ConsistentParticleFilter::new(
             self.num_particles,
-            &starting_map,
+            self.square_size_m,
+            &Create3Info::new(self.noises),
             self.selection_strategy,
         );
         for (i, sensor_info) in self.transcript.iter().enumerate() {
@@ -427,7 +424,7 @@ impl ParticleFilterRunner {
         }
     }
 
-    fn completion_status(&self, particle_filter: &ConsistentParticleFilter<GridObstacles>) {
+    fn completion_status(&self, particle_filter: &ConsistentParticleFilter<Create3Info>) {
         let stats = particle_filter.stats();
         let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
         let mut status = self.status.lock().unwrap();
@@ -441,7 +438,7 @@ impl ParticleFilterRunner {
         i: usize,
         elapsed: Duration,
         pose: RobotPose<Radians>,
-        map: &GridObstacles,
+        map: &BitGridMap,
     ) {
         let elapsed = elapsed.as_secs_f64();
         let iteration = 1000.0 * elapsed / i as f64;

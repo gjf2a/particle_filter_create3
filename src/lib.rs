@@ -1,13 +1,40 @@
 pub mod drivers;
-pub mod grid_obstacles;
 pub mod odometry_transcripts;
 
 use std::{f64::consts::PI, fmt::Display, str::FromStr};
 
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
-use particle_filter::Noise;
+use eframe::egui::Color32;
+use particle_filter::{Noise, RobotInfo, bit_grid_map::Cell};
 
 pub const CREATE3_RADIUS: f64 = 0.2032; // meters
+
+#[derive(Clone)]
+pub struct Create3Info {
+    noises: Noises,
+}
+
+impl Create3Info {
+    pub fn new(noises: Noises) -> Self {
+        Self { noises }
+    }
+}
+
+impl RobotInfo for Create3Info {
+    type SensorType = Bump;
+
+    fn robot_radius_m(&self) -> f64 {
+        CREATE3_RADIUS
+    }
+
+    fn obstacle_at(&self, pose: &RobotPose<Radians>, sensor_info: &Bump) -> Option<FloatPoint> {
+        Some(sensor_info.bump_location(pose))
+    }
+
+    fn noise(&self, sensor_info: Option<&Self::SensorType>) -> Noise {
+        self.noises.noise(sensor_info)
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {
@@ -168,7 +195,7 @@ impl Bump {
         }
     }
 
-    pub fn bump_location(&self, pose: RobotPose<Radians>) -> FloatPoint {
+    pub fn bump_location(&self, pose: &RobotPose<Radians>) -> FloatPoint {
         let heading = pose.theta + self.angle_offset();
         pose.pos + (CREATE3_RADIUS, heading).into()
     }
@@ -186,5 +213,14 @@ impl Noises {
             None => self.odom,
             Some(_) => self.obst,
         }
+    }
+}
+
+pub fn cell2color(cell: &Cell) -> Color32 {
+    match cell {
+        Cell::Obstacle => Color32::PURPLE,
+        Cell::Space => Color32::LIGHT_BLUE,
+        Cell::Unvisited => Color32::LIGHT_YELLOW,
+        Cell::Inconsistent => Color32::RED,
     }
 }
