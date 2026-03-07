@@ -3,8 +3,7 @@ use std::cmp::Ordering;
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    ConsistentParticleFilter, RobotInfo, SelectionStrategy,
-    BitGridMap, BitGridStats, Inconsistency,
+    BitGridMap, BitGridStats, ConsistentParticleFilter, Inconsistency, RobotInfo, SelectionStrategy,
 };
 
 use crate::{

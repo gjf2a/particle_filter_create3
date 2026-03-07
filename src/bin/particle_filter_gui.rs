@@ -6,10 +6,7 @@ use bit_grid::{
 };
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 
-use particle_filter::{
-    ConsistentParticleFilter, Noise, SelectionStrategy,
-    BitGridMap, Cell,
-};
+use particle_filter::{BitGridMap, Cell, ConsistentParticleFilter, Noise, SelectionStrategy};
 use particle_filter_create3::{
     Create3Info, Noises, cell2color,
     drivers::{ConsistentData, SuccessData},

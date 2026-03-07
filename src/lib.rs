@@ -5,7 +5,7 @@ use std::{f64::consts::PI, fmt::Display, str::FromStr};
 
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use eframe::egui::Color32;
-use particle_filter::{Noise, RobotInfo, Cell};
+use particle_filter::{Cell, Noise, RobotInfo};
 
 pub const CREATE3_RADIUS: f64 = 0.2032; // meters
 
