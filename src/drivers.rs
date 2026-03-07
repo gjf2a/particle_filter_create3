@@ -2,10 +2,14 @@ use std::cmp::Ordering;
 
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
-use particle_filter::{ConsistentParticleFilter, RobotInfo, SelectionStrategy, bit_grid_map::{BitGridMap, BitGridStats, Inconsistency}};
+use particle_filter::{
+    ConsistentParticleFilter, RobotInfo, SelectionStrategy,
+    bit_grid_map::{BitGridMap, BitGridStats, Inconsistency},
+};
 
 use crate::{
-    Create3Info, Noises, odometry_transcripts::{PoseReport, Transcript}
+    Create3Info, Noises,
+    odometry_transcripts::{PoseReport, Transcript},
 };
 
 pub fn consistent_expr(

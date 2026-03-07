@@ -6,9 +6,14 @@ use bit_grid::{
 };
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 
-use particle_filter::{ConsistentParticleFilter, Noise, SelectionStrategy, bit_grid_map::{BitGridMap, Cell}};
+use particle_filter::{
+    ConsistentParticleFilter, Noise, SelectionStrategy,
+    bit_grid_map::{BitGridMap, Cell},
+};
 use particle_filter_create3::{
-    Create3Info, Noises, cell2color, drivers::{ConsistentData, SuccessData}, odometry_transcripts::Transcript
+    Create3Info, Noises, cell2color,
+    drivers::{ConsistentData, SuccessData},
+    odometry_transcripts::Transcript,
 };
 use std::{
     env,
@@ -208,13 +213,7 @@ impl MainApp {
         });
     }
 
-    fn render_progress(
-        &self,
-        ui: &mut Ui,
-        msg: &str,
-        map: &BitGridMap,
-        pose: &RobotPose<Radians>,
-    ) {
+    fn render_progress(&self, ui: &mut Ui, msg: &str, map: &BitGridMap, pose: &RobotPose<Radians>) {
         ui.label(msg);
         ui.label(format!(
             "{} x {} squares: {} words",
