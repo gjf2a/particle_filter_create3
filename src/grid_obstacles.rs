@@ -18,14 +18,12 @@ pub enum Cell {
     Inconsistent,
 }
 
-impl Cell {
-    pub fn color(&self) -> Color32 {
-        match self {
-            Cell::Obstacle => Color32::PURPLE,
-            Cell::Space => Color32::LIGHT_BLUE,
-            Cell::Unvisited => Color32::LIGHT_YELLOW,
-            Cell::Inconsistent => Color32::RED,
-        }
+pub fn cell2color(cell: &Cell) -> Color32 {
+    match cell {
+        Cell::Obstacle => Color32::PURPLE,
+        Cell::Space => Color32::LIGHT_BLUE,
+        Cell::Unvisited => Color32::LIGHT_YELLOW,
+        Cell::Inconsistent => Color32::RED,
     }
 }
 

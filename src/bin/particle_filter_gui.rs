@@ -10,7 +10,7 @@ use particle_filter::{ConsistentParticleFilter, Noise, SelectionStrategy};
 use particle_filter_create3::{
     Noises,
     drivers::{ConsistentData, SuccessData},
-    grid_obstacles::{Cell, GridObstacles},
+    grid_obstacles::{Cell, GridObstacles, cell2color},
     odometry_transcripts::Transcript,
 };
 use std::{
@@ -334,10 +334,10 @@ fn cell_color(frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) ->
         } else if shadow.get(&p) {
             Color32::GRAY
         } else {
-            cell.color()
+            cell2color(&cell)
         }
     } else {
-        cell.color()
+        cell2color(&cell)
     }
 }
 
