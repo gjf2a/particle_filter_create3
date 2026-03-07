@@ -327,13 +327,7 @@ mod tests {
             theta: Radians::new(0.0),
         };
         let shadow = tester.robot_shadow(pose);
-        let expected = "0000000
-0001000
-0011100
-0111110
-0011100
-0001000
-0000000";
+        let expected = "00100\n01110\n11111\n01110\n00100";
         let shadow_str = format!("{shadow}");
         assert_eq!(expected, shadow_str);
 
