@@ -245,9 +245,6 @@ impl ConsistentMap for GridObstacles {
             None => {
                 let overlap = self.draw_overlapping_shadow_on(self.to_point(pose.pos));
                 self.space_contiguous = self.space_contiguous && (self.brand_new || overlap);
-                if !self.space_contiguous {
-                    println!("space gap!");
-                }
                 self.brand_new = false;
             }
         }
