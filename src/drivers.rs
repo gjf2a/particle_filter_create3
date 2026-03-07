@@ -4,7 +4,7 @@ use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
 use particle_filter::{
     ConsistentParticleFilter, RobotInfo, SelectionStrategy,
-    bit_grid_map::{BitGridMap, BitGridStats, Inconsistency},
+    BitGridMap, BitGridStats, Inconsistency,
 };
 
 use crate::{

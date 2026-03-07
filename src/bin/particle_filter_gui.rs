@@ -8,7 +8,7 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 
 use particle_filter::{
     ConsistentParticleFilter, Noise, SelectionStrategy,
-    bit_grid_map::{BitGridMap, Cell},
+    BitGridMap, Cell,
 };
 use particle_filter_create3::{
     Create3Info, Noises, cell2color,
