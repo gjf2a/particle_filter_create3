@@ -3,11 +3,12 @@ use std::cmp::Ordering;
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    BitGridMap, BitGridStats, ConsistentParticleFilter, Inconsistency, Noises, SelectionStrategy
+    BitGridMap, BitGridStats, ConsistentParticleFilter, Inconsistency, Noises, SelectionStrategy,
 };
 
 use crate::{
-    CREATE3_RADIUS, odometry_transcripts::{PoseReport, Transcript}
+    CREATE3_RADIUS,
+    odometry_transcripts::{PoseReport, Transcript},
 };
 
 pub fn consistent_expr(
@@ -27,7 +28,12 @@ pub fn consistent_expr(
         if i % 1000 == 0 {
             println!("{i}/{}", transcript.len());
         }
-        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())));
+        particle_filter.iterate(
+            sensor_info.odometry(),
+            sensor_info
+                .obstacles()
+                .map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())),
+        );
         if particle_filter.failed() {
             println!("Failed at iteration {i}");
             break;
@@ -162,10 +168,7 @@ pub fn closest_estimate(
         .unwrap()
 }
 
-pub fn farthest_estimate(
-    actual: &FloatPoint,
-    particles: &ConsistentParticleFilter,
-) -> f64 {
+pub fn farthest_estimate(actual: &FloatPoint, particles: &ConsistentParticleFilter) -> f64 {
     particles
         .particles()
         .map(|p| p.estimated_pose().pos.euclidean_distance(*actual))

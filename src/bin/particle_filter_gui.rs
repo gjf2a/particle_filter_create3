@@ -6,8 +6,13 @@ use bit_grid::{
 };
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 
-use particle_filter::{BitGridMap, Cell, ConsistentParticleFilter, Noise, Noises, SelectionStrategy};
-use particle_filter_create3::{CREATE3_RADIUS, cell2color, drivers::{ConsistentData, SuccessData}, odometry_transcripts::Transcript
+use particle_filter::{
+    BitGridMap, Cell, ConsistentParticleFilter, Noise, Noises, SelectionStrategy,
+};
+use particle_filter_create3::{
+    CREATE3_RADIUS, cell2color,
+    drivers::{ConsistentData, SuccessData},
+    odometry_transcripts::Transcript,
 };
 use std::{
     env,
@@ -392,7 +397,8 @@ impl ParticleFilterRunner {
         let mut particle_filter = ConsistentParticleFilter::new(
             self.num_particles,
             self.square_size_m,
-            CREATE3_RADIUS, self.noises,
+            CREATE3_RADIUS,
+            self.noises,
             self.selection_strategy,
         );
         for (i, sensor_info) in self.transcript.iter().enumerate() {
@@ -401,7 +407,12 @@ impl ParticleFilterRunner {
             let pose = particle.estimated_pose();
             let elapsed = Instant::now().duration_since(start);
             self.send_progress(i, elapsed, pose, &map);
-            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())));
+            particle_filter.iterate(
+                sensor_info.odometry(),
+                sensor_info
+                    .obstacles()
+                    .map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())),
+            );
             if let Some(failure) = particle_filter.example_failure() {
                 self.send_progress(i, elapsed, failure.estimated_pose(), &failure.map());
                 break;
