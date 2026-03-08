@@ -7,7 +7,7 @@ use bit_grid::{
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 
 use particle_filter::{
-    BitGridMap, Cell, ConsistentParticleFilter, Noise, Noises, SelectionStrategy,
+    BitGridMap, Cell, Noise, Noises, ParticleFilter, SelectionStrategy, WeightStrategy,
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
@@ -106,7 +106,7 @@ impl MainApp {
         Self {
             filename: filename.to_string(),
             transcript,
-            selection_strategy: SelectionStrategy::DistanceWeight,
+            selection_strategy: SelectionStrategy::RankProportion,
             m_per_square: "0.1".to_string(),
             num_particles: "1000".to_string(),
             clear_noise_xy: "7e-4".to_string(),
@@ -237,6 +237,7 @@ impl MainApp {
         let runner = ParticleFilterRunner {
             transcript: self.transcript.clone(),
             selection_strategy: self.selection_strategy,
+            weight_strategy: WeightStrategy::MinPose,
             square_size_m: self.m_per_square.parse::<f64>()?,
             noises: self.noises_from_ui()?,
             num_particles: self.num_particles.parse::<usize>()?,
@@ -384,6 +385,7 @@ fn render_inconsistencies(ui: &mut Ui, results: &ConsistentData) {
 pub struct ParticleFilterRunner {
     transcript: Transcript,
     selection_strategy: SelectionStrategy,
+    weight_strategy: WeightStrategy,
     square_size_m: f64,
     noises: Noises,
     num_particles: usize,
@@ -394,12 +396,13 @@ impl ParticleFilterRunner {
     pub fn run(&self) {
         let start = Instant::now();
         self.reset_status();
-        let mut particle_filter = ConsistentParticleFilter::new(
+        let mut particle_filter = ParticleFilter::new(
             self.num_particles,
             self.square_size_m,
             CREATE3_RADIUS,
             self.noises,
             self.selection_strategy,
+            self.weight_strategy,
         );
         for (i, sensor_info) in self.transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
@@ -428,7 +431,7 @@ impl ParticleFilterRunner {
         }
     }
 
-    fn completion_status(&self, particle_filter: &ConsistentParticleFilter) {
+    fn completion_status(&self, particle_filter: &ParticleFilter) {
         let stats = particle_filter.stats();
         let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
         let mut status = self.status.lock().unwrap();

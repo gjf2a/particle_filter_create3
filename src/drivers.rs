@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    BitGridMap, BitGridStats, ConsistentParticleFilter, Inconsistency, Noises, SelectionStrategy,
+    BitGridMap, BitGridStats, Inconsistency, Noises, ParticleFilter, SelectionStrategy,
 };
 
 use crate::{
@@ -16,13 +16,14 @@ pub fn consistent_expr(
     noises: Noises,
     num_particles: usize,
     transcript: &Transcript,
-) -> ConsistentParticleFilter {
-    let mut particle_filter = ConsistentParticleFilter::new(
+) -> ParticleFilter {
+    let mut particle_filter = ParticleFilter::new(
         num_particles,
         square_size_m,
         CREATE3_RADIUS,
         noises,
-        SelectionStrategy::DistanceWeight,
+        SelectionStrategy::RankProportion,
+        particle_filter::WeightStrategy::MinPose,
     );
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
@@ -65,7 +66,7 @@ impl SuccessData {
 
 fn get_success_data(
     transcript: &Transcript,
-    particle_filter: &ConsistentParticleFilter,
+    particle_filter: &ParticleFilter,
 ) -> Option<SuccessData> {
     if particle_filter.total_iterations() < transcript.len() {
         None
@@ -93,13 +94,13 @@ pub struct ConsistentData {
     pub obstacle_space_issues: usize,
     pub discontinuity_issues: usize,
     pub iteration_inconsistencies: HashHistogram<usize>,
-    pub particle_filter: ConsistentParticleFilter,
+    pub particle_filter: ParticleFilter,
 }
 
 impl ConsistentData {
     pub fn new(
         transcript: &Transcript,
-        particle_filter: &ConsistentParticleFilter,
+        particle_filter: &ParticleFilter,
         stats: &BitGridStats,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
@@ -148,7 +149,7 @@ impl ConsistentData {
 
 pub fn closest_estimate(
     actual: &FloatPoint,
-    particles: &ConsistentParticleFilter,
+    particles: &ParticleFilter,
 ) -> (RobotPose<Radians>, BitGridMap, usize) {
     particles
         .particles()
@@ -168,7 +169,7 @@ pub fn closest_estimate(
         .unwrap()
 }
 
-pub fn farthest_estimate(actual: &FloatPoint, particles: &ConsistentParticleFilter) -> f64 {
+pub fn farthest_estimate(actual: &FloatPoint, particles: &ParticleFilter) -> f64 {
     particles
         .particles()
         .map(|p| p.estimated_pose().pos.euclidean_distance(*actual))
