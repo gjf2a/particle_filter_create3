@@ -23,15 +23,11 @@ pub fn consistent_expr(
         noises,
         SelectionStrategy::DistanceWeight,
     );
-    let mut last_raw = None;
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
             println!("{i}/{}", transcript.len());
         }
-        if sensor_info.odometry().is_some() {
-            last_raw = sensor_info.odometry();            
-        }
-        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&last_raw.unwrap())));
+        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())));
         if particle_filter.failed() {
             println!("Failed at iteration {i}");
             break;

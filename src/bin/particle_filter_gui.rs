@@ -395,17 +395,13 @@ impl ParticleFilterRunner {
             CREATE3_RADIUS, self.noises,
             self.selection_strategy,
         );
-        let mut last_raw = None;
         for (i, sensor_info) in self.transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let map = particle.map().clone();
             let pose = particle.estimated_pose();
             let elapsed = Instant::now().duration_since(start);
             self.send_progress(i, elapsed, pose, &map);
-            if sensor_info.odometry().is_some() {
-                last_raw = sensor_info.odometry();
-            }
-            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&last_raw.unwrap())));
+            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())));
             if let Some(failure) = particle_filter.example_failure() {
                 self.send_progress(i, elapsed, failure.estimated_pose(), &failure.map());
                 break;
