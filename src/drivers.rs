@@ -3,12 +3,11 @@ use std::cmp::Ordering;
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    BitGridMap, BitGridStats, ConsistentParticleFilter, Inconsistency, RobotInfo, SelectionStrategy,
+    BitGridMap, BitGridStats, ConsistentParticleFilter, Inconsistency, Noises, SelectionStrategy
 };
 
 use crate::{
-    Create3Info, Noises,
-    odometry_transcripts::{PoseReport, Transcript},
+    CREATE3_RADIUS, odometry_transcripts::{PoseReport, Transcript}
 };
 
 pub fn consistent_expr(
@@ -16,18 +15,23 @@ pub fn consistent_expr(
     noises: Noises,
     num_particles: usize,
     transcript: &Transcript,
-) -> ConsistentParticleFilter<Create3Info> {
+) -> ConsistentParticleFilter {
     let mut particle_filter = ConsistentParticleFilter::new(
         num_particles,
         square_size_m,
-        &Create3Info::new(noises),
+        CREATE3_RADIUS,
+        noises,
         SelectionStrategy::DistanceWeight,
     );
+    let mut last_raw = None;
     for (i, sensor_info) in transcript.iter().enumerate() {
         if i % 1000 == 0 {
             println!("{i}/{}", transcript.len());
         }
-        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+        if sensor_info.odometry().is_some() {
+            last_raw = sensor_info.odometry();            
+        }
+        particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&last_raw.unwrap())));
         if particle_filter.failed() {
             println!("Failed at iteration {i}");
             break;
@@ -59,7 +63,7 @@ impl SuccessData {
 
 fn get_success_data(
     transcript: &Transcript,
-    particle_filter: &ConsistentParticleFilter<Create3Info>,
+    particle_filter: &ConsistentParticleFilter,
 ) -> Option<SuccessData> {
     if particle_filter.total_iterations() < transcript.len() {
         None
@@ -87,13 +91,13 @@ pub struct ConsistentData {
     pub obstacle_space_issues: usize,
     pub discontinuity_issues: usize,
     pub iteration_inconsistencies: HashHistogram<usize>,
-    pub particle_filter: ConsistentParticleFilter<Create3Info>,
+    pub particle_filter: ConsistentParticleFilter,
 }
 
 impl ConsistentData {
     pub fn new(
         transcript: &Transcript,
-        particle_filter: &ConsistentParticleFilter<Create3Info>,
+        particle_filter: &ConsistentParticleFilter,
         stats: &BitGridStats,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
@@ -140,9 +144,9 @@ impl ConsistentData {
     }
 }
 
-pub fn closest_estimate<R: RobotInfo>(
+pub fn closest_estimate(
     actual: &FloatPoint,
-    particles: &ConsistentParticleFilter<R>,
+    particles: &ConsistentParticleFilter,
 ) -> (RobotPose<Radians>, BitGridMap, usize) {
     particles
         .particles()
@@ -162,9 +166,9 @@ pub fn closest_estimate<R: RobotInfo>(
         .unwrap()
 }
 
-pub fn farthest_estimate<R: RobotInfo>(
+pub fn farthest_estimate(
     actual: &FloatPoint,
-    particles: &ConsistentParticleFilter<R>,
+    particles: &ConsistentParticleFilter,
 ) -> f64 {
     particles
         .particles()

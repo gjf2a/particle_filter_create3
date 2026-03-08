@@ -6,11 +6,8 @@ use bit_grid::{
 };
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 
-use particle_filter::{BitGridMap, Cell, ConsistentParticleFilter, Noise, SelectionStrategy};
-use particle_filter_create3::{
-    Create3Info, Noises, cell2color,
-    drivers::{ConsistentData, SuccessData},
-    odometry_transcripts::Transcript,
+use particle_filter::{BitGridMap, Cell, ConsistentParticleFilter, Noise, Noises, SelectionStrategy};
+use particle_filter_create3::{CREATE3_RADIUS, cell2color, drivers::{ConsistentData, SuccessData}, odometry_transcripts::Transcript
 };
 use std::{
     env,
@@ -395,16 +392,20 @@ impl ParticleFilterRunner {
         let mut particle_filter = ConsistentParticleFilter::new(
             self.num_particles,
             self.square_size_m,
-            &Create3Info::new(self.noises),
+            CREATE3_RADIUS, self.noises,
             self.selection_strategy,
         );
+        let mut last_raw = None;
         for (i, sensor_info) in self.transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let map = particle.map().clone();
             let pose = particle.estimated_pose();
             let elapsed = Instant::now().duration_since(start);
             self.send_progress(i, elapsed, pose, &map);
-            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles());
+            if sensor_info.odometry().is_some() {
+                last_raw = sensor_info.odometry();
+            }
+            particle_filter.iterate(sensor_info.odometry(), sensor_info.obstacles().map(|bump| bump.bump_location(&last_raw.unwrap())));
             if let Some(failure) = particle_filter.example_failure() {
                 self.send_progress(i, elapsed, failure.estimated_pose(), &failure.map());
                 break;
@@ -420,7 +421,7 @@ impl ParticleFilterRunner {
         }
     }
 
-    fn completion_status(&self, particle_filter: &ConsistentParticleFilter<Create3Info>) {
+    fn completion_status(&self, particle_filter: &ConsistentParticleFilter) {
         let stats = particle_filter.stats();
         let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
         let mut status = self.status.lock().unwrap();
