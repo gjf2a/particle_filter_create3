@@ -15,7 +15,10 @@ use particle_filter_create3::{
     odometry_transcripts::Transcript,
 };
 use std::{
-    env, fmt::Debug, sync::{Arc, Mutex}, time::{Duration, Instant}
+    env,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 const MAP_CELL_SIZE: f32 = 3.0;
@@ -166,7 +169,11 @@ impl MainApp {
         });
     }
 
-    fn render_radios<S: Iterator<Item=T>, T: Eq + Copy + Debug>(ui: &mut Ui, state: &mut T, items: S) {
+    fn render_radios<S: Iterator<Item = T>, T: Eq + Copy + Debug>(
+        ui: &mut Ui,
+        state: &mut T,
+        items: S,
+    ) {
         ui.vertical(|ui| {
             for item in items {
                 ui.radio_value(state, item, format!("{item:?}"));
@@ -439,7 +446,13 @@ impl ParticleFilterRunner {
                     .map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())),
             );
             if let Some(failure) = particle_filter.example_failure() {
-                self.send_progress(i, elapsed, longest_iteration, failure.estimated_pose(), &failure.map());
+                self.send_progress(
+                    i,
+                    elapsed,
+                    longest_iteration,
+                    failure.estimated_pose(),
+                    &failure.map(),
+                );
                 break;
             }
         }

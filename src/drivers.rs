@@ -2,13 +2,9 @@ use std::cmp::Ordering;
 
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
-use particle_filter::{
-    BitGridMap, BitGridStats, Inconsistency, ParticleFilter,
-};
+use particle_filter::{BitGridMap, BitGridStats, Inconsistency, ParticleFilter};
 
-use crate::
-    odometry_transcripts::{PoseReport, Transcript}
-;
+use crate::odometry_transcripts::{PoseReport, Transcript};
 
 #[derive(Clone)]
 pub struct SuccessData {
