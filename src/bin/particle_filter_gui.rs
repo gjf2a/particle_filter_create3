@@ -5,7 +5,7 @@ use bit_grid::{
     pose::RobotPose,
 };
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
-
+use enum_iterator::all;
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, ParticleFilter, SelectionStrategy, WeightStrategy,
 };
@@ -16,6 +16,7 @@ use particle_filter_create3::{
 };
 use std::{
     env,
+    fmt::Debug,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -58,6 +59,7 @@ struct MainApp {
     filename: String,
     transcript: Transcript,
     selection_strategy: SelectionStrategy,
+    weight_strategy: WeightStrategy,
     num_particles: String,
     m_per_square: String,
     obst_noise_xy: String,
@@ -89,6 +91,7 @@ impl eframe::App for MainApp {
             ));
             ui.horizontal(|ui| {
                 self.render_settings(ui);
+                self.render_choices(ui);
                 let status = self.status.lock().unwrap();
                 if let Some(status) = &*status {
                     if let Some(results) = &status.results {
@@ -107,6 +110,7 @@ impl MainApp {
             filename: filename.to_string(),
             transcript,
             selection_strategy: SelectionStrategy::RankProportion,
+            weight_strategy: WeightStrategy::MinPose,
             m_per_square: "0.1".to_string(),
             num_particles: "1000".to_string(),
             clear_noise_xy: "7e-4".to_string(),
@@ -153,6 +157,23 @@ impl MainApp {
             }
 
             self.assess_progress(ui);
+        });
+    }
+
+    fn render_choices(&mut self, ui: &mut Ui) {
+        ui.vertical(|ui| {
+            ui.heading("Selection Strategy");
+            Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
+            ui.heading("Weight Calculation");
+            Self::render_radios(ui, &mut self.weight_strategy, all::<WeightStrategy>());
+        });
+    }
+
+    fn render_radios<S: Iterator<Item=T>, T: Eq + Copy + Debug>(ui: &mut Ui, state: &mut T, items: S) {
+        ui.vertical(|ui| {
+            for item in items {
+                ui.radio_value(state, item, format!("{item:?}"));
+            }
         });
     }
 
@@ -237,7 +258,7 @@ impl MainApp {
         let runner = ParticleFilterRunner {
             transcript: self.transcript.clone(),
             selection_strategy: self.selection_strategy,
-            weight_strategy: WeightStrategy::MinPose,
+            weight_strategy: self.weight_strategy,
             square_size_m: self.m_per_square.parse::<f64>()?,
             noises: self.noises_from_ui()?,
             num_particles: self.num_particles.parse::<usize>()?,
