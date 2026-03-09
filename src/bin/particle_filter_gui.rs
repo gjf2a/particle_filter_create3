@@ -15,10 +15,7 @@ use particle_filter_create3::{
     odometry_transcripts::Transcript,
 };
 use std::{
-    env,
-    fmt::Debug,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    env, fmt::Debug, sync::{Arc, Mutex}, time::{Duration, Instant}
 };
 
 const MAP_CELL_SIZE: f32 = 3.0;
@@ -425,12 +422,16 @@ impl ParticleFilterRunner {
             self.selection_strategy,
             self.weight_strategy,
         );
+        let mut longest_iteration = None;
         for (i, sensor_info) in self.transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let map = particle.map().clone();
             let pose = particle.estimated_pose();
             let elapsed = Instant::now().duration_since(start);
-            self.send_progress(i, elapsed, pose, &map);
+            if longest_iteration.map_or(true, |longest| elapsed.as_secs_f64() > longest) {
+                longest_iteration = Some(elapsed.as_secs_f64());
+            }
+            self.send_progress(i, elapsed, longest_iteration, pose, &map);
             particle_filter.iterate(
                 sensor_info.odometry(),
                 sensor_info
@@ -438,7 +439,7 @@ impl ParticleFilterRunner {
                     .map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())),
             );
             if let Some(failure) = particle_filter.example_failure() {
-                self.send_progress(i, elapsed, failure.estimated_pose(), &failure.map());
+                self.send_progress(i, elapsed, longest_iteration, failure.estimated_pose(), &failure.map());
                 break;
             }
         }
@@ -465,15 +466,17 @@ impl ParticleFilterRunner {
         &self,
         i: usize,
         elapsed: Duration,
+        longest_iteration: Option<f64>,
         pose: RobotPose<Radians>,
         map: &BitGridMap,
     ) {
         let elapsed = elapsed.as_secs_f64();
         let iteration = 1000.0 * elapsed / i as f64;
         let message = format!(
-            "{}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration)",
+            "{}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration; longest {:.2}s)",
             i + 1,
-            self.transcript.len()
+            self.transcript.len(),
+            longest_iteration.unwrap_or(iteration)
         );
         let mut status = self.status.lock().unwrap();
         let results = status.as_ref().and_then(|s| s.results.clone());
