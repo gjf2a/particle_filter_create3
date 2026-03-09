@@ -3,45 +3,12 @@ use std::cmp::Ordering;
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    BitGridMap, BitGridStats, Inconsistency, Noises, ParticleFilter, SelectionStrategy,
+    BitGridMap, BitGridStats, Inconsistency, ParticleFilter,
 };
 
-use crate::{
-    CREATE3_RADIUS,
-    odometry_transcripts::{PoseReport, Transcript},
-};
-
-pub fn consistent_expr(
-    square_size_m: f64,
-    noises: Noises,
-    num_particles: usize,
-    transcript: &Transcript,
-) -> ParticleFilter {
-    let mut particle_filter = ParticleFilter::new(
-        num_particles,
-        square_size_m,
-        CREATE3_RADIUS,
-        noises,
-        SelectionStrategy::RankProportion,
-        particle_filter::WeightStrategy::MinPose,
-    );
-    for (i, sensor_info) in transcript.iter().enumerate() {
-        if i % 1000 == 0 {
-            println!("{i}/{}", transcript.len());
-        }
-        particle_filter.iterate(
-            sensor_info.odometry(),
-            sensor_info
-                .obstacles()
-                .map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())),
-        );
-        if particle_filter.failed() {
-            println!("Failed at iteration {i}");
-            break;
-        }
-    }
-    particle_filter
-}
+use crate::
+    odometry_transcripts::{PoseReport, Transcript}
+;
 
 #[derive(Clone)]
 pub struct SuccessData {
