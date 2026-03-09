@@ -259,7 +259,7 @@ impl MainApp {
     }
 
     fn start(&self) -> anyhow::Result<()> {
-        let runner = ParticleFilterRunner {
+        let mut runner = ParticleFilterRunner {
             transcript: self.transcript.clone(),
             selection_strategy: self.selection_strategy,
             weight_strategy: self.weight_strategy,
@@ -267,6 +267,9 @@ impl MainApp {
             noises: self.noises_from_ui()?,
             num_particles: self.num_particles.parse::<usize>()?,
             status: self.status.clone(),
+            duration: 0.0,
+            mean_iteration_time: 0.0,
+            max_iteration_time: 0.0,
         };
         std::thread::spawn(move || {
             runner.run();
@@ -415,10 +418,13 @@ pub struct ParticleFilterRunner {
     noises: Noises,
     num_particles: usize,
     status: Arc<Mutex<Option<CurrentData>>>,
+    duration: f64,
+    mean_iteration_time: f64,
+    max_iteration_time: f64,
 }
 
 impl ParticleFilterRunner {
-    pub fn run(&self) {
+    pub fn run(&mut self) {
         let start = Instant::now();
         self.reset_status();
         let mut particle_filter = ParticleFilter::new(
@@ -429,16 +435,13 @@ impl ParticleFilterRunner {
             self.selection_strategy,
             self.weight_strategy,
         );
-        let mut longest_iteration = None;
-        for (i, sensor_info) in self.transcript.iter().enumerate() {
+        let transcript = self.transcript.clone();
+        for (i, sensor_info) in transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let map = particle.map().clone();
             let pose = particle.estimated_pose();
             let elapsed = Instant::now().duration_since(start);
-            if longest_iteration.map_or(true, |longest| elapsed.as_secs_f64() > longest) {
-                longest_iteration = Some(elapsed.as_secs_f64());
-            }
-            self.send_progress(i, elapsed, longest_iteration, pose, &map);
+            self.send_progress(i, elapsed, pose, &map);
             particle_filter.iterate(
                 sensor_info.odometry(),
                 sensor_info
@@ -449,7 +452,6 @@ impl ParticleFilterRunner {
                 self.send_progress(
                     i,
                     elapsed,
-                    longest_iteration,
                     failure.estimated_pose(),
                     &failure.map(),
                 );
@@ -468,7 +470,7 @@ impl ParticleFilterRunner {
 
     fn completion_status(&self, particle_filter: &ParticleFilter) {
         let stats = particle_filter.stats();
-        let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats);
+        let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats, self.duration, self.mean_iteration_time, self.max_iteration_time);
         let mut status = self.status.lock().unwrap();
         if let Some(status) = &mut *status {
             status.results = Some(packed_results);
@@ -476,20 +478,24 @@ impl ParticleFilterRunner {
     }
 
     pub fn send_progress(
-        &self,
+        &mut self,
         i: usize,
         elapsed: Duration,
-        longest_iteration: Option<f64>,
         pose: RobotPose<Radians>,
         map: &BitGridMap,
     ) {
-        let elapsed = elapsed.as_secs_f64();
-        let iteration = 1000.0 * elapsed / i as f64;
+        self.duration = elapsed.as_secs_f64();
+        self.mean_iteration_time = 1000.0 * self.duration / i as f64;
+        if self.mean_iteration_time > self.max_iteration_time {
+            self.max_iteration_time = self.mean_iteration_time;
+        }
         let message = format!(
-            "{}/{} ({elapsed:.2}s; {iteration:.1}ms/iteration; longest {:.2}s)",
+            "{}/{} ({:.2}s; {:.1}ms/iteration; longest {:.2}s)",
             i + 1,
             self.transcript.len(),
-            longest_iteration.unwrap_or(iteration)
+            self.duration,
+            self.mean_iteration_time,
+            self.max_iteration_time,
         );
         let mut status = self.status.lock().unwrap();
         let results = status.as_ref().and_then(|s| s.results.clone());

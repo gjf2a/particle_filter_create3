@@ -52,6 +52,9 @@ pub struct ConsistentData {
     pub outcome: Option<SuccessData>,
     pub actual: FloatPoint,
     pub odometry_report: PoseReport,
+    pub duration: f64,
+    pub mean_iteration_time: f64,
+    pub max_iteration_time: f64,
     pub iterations_with_inconsistencies: usize,
     pub total_inconsistencies: usize,
     pub obstacle_space_issues: usize,
@@ -65,12 +68,18 @@ impl ConsistentData {
         transcript: &Transcript,
         particle_filter: &ParticleFilter,
         stats: &BitGridStats,
+        duration: f64,
+        mean_iteration_time: f64,
+        max_iteration_time: f64,
     ) -> Self {
         let iteration_inconsistencies = stats.by_iteration();
         Self {
             outcome: get_success_data(transcript, particle_filter),
             actual: transcript.actual(),
             odometry_report: transcript.pose_to_actual(transcript.final_pose()),
+            duration,
+            mean_iteration_time,
+            max_iteration_time,
             iterations_with_inconsistencies: iteration_inconsistencies.len(),
             total_inconsistencies: iteration_inconsistencies.total_count(),
             obstacle_space_issues: stats.total_for(&Inconsistency::ObstacleSpaceOverlap),
