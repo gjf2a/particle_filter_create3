@@ -1,17 +1,17 @@
 use bit_grid::{
     BitGrid,
     angle::{Degrees, Radians},
-    point::GridPoint,
-    pose::RobotPose,
+    point::GridPoint, pose::RobotPose,
 };
+use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 use enum_iterator::all;
 use particle_filter::{
-    BitGridMap, Cell, Noise, Noises, ParticleFilter, SelectionStrategy, WeightStrategy,
+    BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings, SelectionStrategy, WeightStrategy
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
-    drivers::{ConsistentData, SuccessData},
+    drivers::{MultiRunData, OneRunData, SuccessData},
     odometry_transcripts::Transcript,
 };
 use std::{
@@ -66,16 +66,20 @@ struct MainApp {
     obst_noise_theta: String,
     clear_noise_xy: String,
     clear_noise_theta: String,
+    num_exprs: String,
+    thread_running: Arc<AtomicCell<bool>>,
     status: Arc<Mutex<Option<CurrentData>>>,
+    expr_data: Arc<Mutex<Option<MultiRunData>>>,
+    current_expr: Arc<AtomicCell<Option<usize>>>,
 }
 
 #[derive(Clone)]
 struct CurrentData {
     message: String,
     map: BitGridMap,
-    pose: RobotPose<Radians>,
-    results: Option<ConsistentData>,
+    results: Option<OneRunData>,
     current_particle: usize,
+    pose: RobotPose<Radians>,
 }
 
 const FPS: f32 = 20.0;
@@ -117,13 +121,36 @@ impl MainApp {
             clear_noise_theta: "2e-4".to_string(),
             obst_noise_xy: "0.032".to_string(),
             obst_noise_theta: "0.62".to_string(),
+            num_exprs: "30".to_string(),
             status: Arc::new(Mutex::new(None)),
+            expr_data: Arc::new(Mutex::new(None)),
+            thread_running: Arc::new(AtomicCell::new(false)),
+            current_expr: Arc::new(AtomicCell::new(None)),
         }
+    }
+
+    fn thread_running(&self) -> bool {
+        self.thread_running.load()
+    }
+
+    fn settings(&self) -> anyhow::Result<ParticleFilterSettings> {
+        Ok(ParticleFilterSettings { 
+            noises: self.noises_from_ui()?, 
+            num_particles: self.num_particles.parse::<usize>()?, 
+            square_size_m: self.m_per_square.parse::<f64>()?,
+            robot_radius_m: CREATE3_RADIUS, 
+            selection_strategy: self.selection_strategy, 
+            weight_strategy: self.weight_strategy, 
+        })
     }
 
     fn setup(&mut self, ctx: &Context) {
         ctx.set_pixels_per_point(2.0);
         ctx.set_visuals(Visuals::light());
+    }
+
+    fn limited_text_edit(ui: &mut Ui, target: &mut String) {
+        ui.add_sized(egui::vec2(100.0, 20.0), egui::TextEdit::singleline(target));
     }
 
     fn render_settings(&mut self, ui: &mut Ui) {
@@ -142,15 +169,15 @@ impl MainApp {
             );
             ui.horizontal(|ui| {
                 ui.label("Particles");
-                ui.text_edit_singleline(&mut self.num_particles);
+                Self::limited_text_edit(ui, &mut self.num_particles);
             });
 
             ui.horizontal(|ui| {
                 ui.label("Meters per square");
-                ui.text_edit_singleline(&mut self.m_per_square);
+                Self::limited_text_edit(ui, &mut self.m_per_square);
             });
 
-            if ui.button("Start").clicked() {
+            if !self.thread_running() && ui.button("Start").clicked() {
                 if let Err(e) = self.start() {
                     ui.label(format!("{e}"));
                 }
@@ -166,7 +193,60 @@ impl MainApp {
             Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
             ui.heading("Weight Calculation");
             Self::render_radios(ui, &mut self.weight_strategy, all::<WeightStrategy>());
+            if self.thread_running() {
+                self.current_expr.load().map(|current_expr| {
+                    ui.label(format!("{current_expr}/{}", self.num_exprs));
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label("Number of Runs");
+                    Self::limited_text_edit(ui, &mut self.num_exprs);
+                });
+                if ui.button("Experiments").clicked() {
+                    if let Err(e) = self.run_experiments() {
+                        ui.label(format!("Experiments error: {e}"));
+                    }
+                }
+            }
         });
+    }
+
+    fn run_experiments(&self) -> anyhow::Result<()> {
+        let num_exprs = self.num_exprs.parse::<usize>()?;
+        let settings = self.settings()?;
+        let runner = self.make_runner()?;
+        let status = self.status.clone();
+        let expr_data = self.expr_data.clone();
+        let thread_running = self.thread_running.clone();
+        let current_expr = self.current_expr.clone();
+        std::thread::spawn(move || {
+            thread_running.store(true);
+            for current in 0..num_exprs {
+                current_expr.store(Some(current + 1));
+                let mut runner = runner.clone();
+                runner.run();
+                let status = status.lock().unwrap();
+                if let Some(status) = status.as_ref() {
+                    if let Some(data_from_run) = &status.results {
+                        let mut expr_data = expr_data.lock().unwrap();
+                        match expr_data.as_mut() {
+                            Some(expr_data) => {
+                                expr_data.data.push(data_from_run.clone());
+                            }
+                            None => {
+                                *expr_data = Some(MultiRunData {
+                                    data: vec![data_from_run.clone()],
+                                    settings
+                                });
+                            }
+                        }
+                    }
+                }                
+            }
+            current_expr.store(None);
+            thread_running.store(false);
+        });
+        Ok(())
     }
 
     fn render_radios<S: Iterator<Item = T>, T: Eq + Copy + Debug>(
@@ -184,15 +264,16 @@ impl MainApp {
     fn assess_progress(&self, ui: &mut Ui) {
         let mut status = self.status.lock().unwrap();
         if let Some(status) = &mut *status {
-            if let Some(data) = &status.results {
+            if let Some(data) = status.results.clone() {
                 self.render_completed(ui, &data.clone(), status);
             } else {
-                self.render_progress(ui, &status.message, &status.map, &status.pose);
+                self.render_progress(ui, &status.message, &status.map);
+                Self::render_map(ui, &status.map, status.pose);
             }
         }
     }
 
-    fn render_completed(&self, ui: &mut Ui, data: &ConsistentData, status: &mut CurrentData) {
+    fn render_completed(&self, ui: &mut Ui, data: &OneRunData, status: &mut CurrentData) {
         let num_particles = data.particle_filter.len();
         let msg = match &data.outcome {
             None => format!("Failed"),
@@ -205,8 +286,9 @@ impl MainApp {
             ui,
             format!("{msg} {}", status.message).as_str(),
             data.particle_filter[status.current_particle].map(),
-            &data.particle_filter[status.current_particle].estimated_pose(),
         );
+        let particle = &data.particle_filter[status.current_particle];
+        Self::render_map(ui, particle.map(), particle.estimated_pose());
     }
 
     fn render_map_selector(
@@ -237,7 +319,7 @@ impl MainApp {
         });
     }
 
-    fn render_progress(&self, ui: &mut Ui, msg: &str, map: &BitGridMap, pose: &RobotPose<Radians>) {
+    fn render_progress(&self, ui: &mut Ui, msg: &str, map: &BitGridMap) {
         ui.label(msg);
         ui.label(format!(
             "{} x {} squares: {} words",
@@ -255,24 +337,26 @@ impl MainApp {
             all_frontier.count_ones(),
             map.num_spaces()
         ));
-        Self::render_map(ui, map, *pose, &frontier);
     }
 
-    fn start(&self) -> anyhow::Result<()> {
-        let mut runner = ParticleFilterRunner {
+    fn make_runner(&self) -> anyhow::Result<ParticleFilterRunner> {
+        Ok(ParticleFilterRunner {
             transcript: self.transcript.clone(),
-            selection_strategy: self.selection_strategy,
-            weight_strategy: self.weight_strategy,
-            square_size_m: self.m_per_square.parse::<f64>()?,
-            noises: self.noises_from_ui()?,
-            num_particles: self.num_particles.parse::<usize>()?,
+            settings: self.settings()?,
             status: self.status.clone(),
             duration: 0.0,
             mean_iteration_time: 0.0,
             max_iteration_time: 0.0,
-        };
+        })
+    }
+
+    fn start(&self) -> anyhow::Result<()> {
+        let mut runner = self.make_runner()?;
+        let thread_running = self.thread_running.clone();
         std::thread::spawn(move || {
+            thread_running.store(true);
             runner.run();
+            thread_running.store(false);
         });
         Ok(())
     }
@@ -295,16 +379,16 @@ impl MainApp {
             ui.heading(header);
             ui.horizontal(|ui| {
                 ui.label("x-y");
-                ui.text_edit_singleline(entry_x_y);
+                Self::limited_text_edit(ui, entry_x_y);
             });
             ui.horizontal(|ui| {
                 ui.label("theta");
-                ui.text_edit_singleline(entry_theta);
+                Self::limited_text_edit(ui, entry_theta);
             });
         });
     }
 
-    fn render_results(ui: &mut Ui, results: &ConsistentData) {
+    fn render_results(ui: &mut Ui, results: &OneRunData) {
         ui.vertical(|ui| {
             render_outcome(ui, &results.outcome);
 
@@ -317,7 +401,7 @@ impl MainApp {
         });
     }
 
-    fn render_map(ui: &mut Ui, map: &BitGridMap, pose: RobotPose<Radians>, frontier: &BitGrid) {
+    fn render_map(ui: &mut Ui, map: &BitGridMap, pose: RobotPose<Radians>) {
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
                 map.height() as f32 * MAP_CELL_SIZE,
@@ -328,10 +412,11 @@ impl MainApp {
         let shadow = map.robot_shadow(pose);
         let response_rect = response.rect;
         let bb = map.bounding_box();
+        let frontier = map.open_frontier_spaces();
         for (p, cell) in map.points() {
             let x_rect = ((p[1] - bb.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
             let y_rect = ((p[0] - bb.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
-            let color = cell_color(frontier, &shadow, cell, p);
+            let color = cell_color(&frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
     }
@@ -391,7 +476,7 @@ fn render_outcome(ui: &mut Ui, outcome: &Option<SuccessData>) {
     }
 }
 
-fn render_inconsistencies(ui: &mut Ui, results: &ConsistentData) {
+fn render_inconsistencies(ui: &mut Ui, results: &OneRunData) {
     ui.label(format!(
         "Iterations w/inconsistencies: {}",
         results.iterations_with_inconsistencies
@@ -410,13 +495,10 @@ fn render_inconsistencies(ui: &mut Ui, results: &ConsistentData) {
     ));
 }
 
+#[derive(Clone)]
 pub struct ParticleFilterRunner {
     transcript: Transcript,
-    selection_strategy: SelectionStrategy,
-    weight_strategy: WeightStrategy,
-    square_size_m: f64,
-    noises: Noises,
-    num_particles: usize,
+    settings: ParticleFilterSettings,
     status: Arc<Mutex<Option<CurrentData>>>,
     duration: f64,
     mean_iteration_time: f64,
@@ -427,21 +509,12 @@ impl ParticleFilterRunner {
     pub fn run(&mut self) {
         let start = Instant::now();
         self.reset_status();
-        let mut particle_filter = ParticleFilter::new(
-            self.num_particles,
-            self.square_size_m,
-            CREATE3_RADIUS,
-            self.noises,
-            self.selection_strategy,
-            self.weight_strategy,
-        );
+        let mut particle_filter = ParticleFilter::new(self.settings);
         let transcript = self.transcript.clone();
         for (i, sensor_info) in transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
-            let map = particle.map().clone();
-            let pose = particle.estimated_pose();
             let elapsed = Instant::now().duration_since(start);
-            self.send_progress(i, elapsed, pose, &map);
+            self.send_progress(i, elapsed, particle);
             particle_filter.iterate(
                 sensor_info.odometry(),
                 sensor_info
@@ -452,8 +525,7 @@ impl ParticleFilterRunner {
                 self.send_progress(
                     i,
                     elapsed,
-                    failure.estimated_pose(),
-                    &failure.map(),
+                    &failure,
                 );
                 break;
             }
@@ -470,7 +542,7 @@ impl ParticleFilterRunner {
 
     fn completion_status(&self, particle_filter: &ParticleFilter) {
         let stats = particle_filter.stats();
-        let packed_results = ConsistentData::new(&self.transcript, &particle_filter, &stats, self.duration, self.mean_iteration_time, self.max_iteration_time);
+        let packed_results = OneRunData::new(&self.transcript, &particle_filter, &stats, self.duration, self.mean_iteration_time, self.max_iteration_time);
         let mut status = self.status.lock().unwrap();
         if let Some(status) = &mut *status {
             status.results = Some(packed_results);
@@ -481,12 +553,11 @@ impl ParticleFilterRunner {
         &mut self,
         i: usize,
         elapsed: Duration,
-        pose: RobotPose<Radians>,
-        map: &BitGridMap,
+        particle: &Particle,
     ) {
         self.duration = elapsed.as_secs_f64();
         self.mean_iteration_time = 1000.0 * self.duration / i as f64;
-        if self.mean_iteration_time > self.max_iteration_time {
+        if i > 0 && self.mean_iteration_time > self.max_iteration_time {
             self.max_iteration_time = self.mean_iteration_time;
         }
         let message = format!(
@@ -501,8 +572,8 @@ impl ParticleFilterRunner {
         let results = status.as_ref().and_then(|s| s.results.clone());
         *status = Some(CurrentData {
             message,
-            map: map.clone(),
-            pose,
+            map: particle.map().clone(),
+            pose: particle.estimated_pose(),
             results,
             current_particle: 0,
         });

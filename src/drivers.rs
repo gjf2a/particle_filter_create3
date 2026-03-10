@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
-use particle_filter::{BitGridMap, BitGridStats, Inconsistency, ParticleFilter};
+use particle_filter::{BitGridMap, BitGridStats, Inconsistency, ParticleFilter, ParticleFilterSettings};
 
 use crate::odometry_transcripts::{PoseReport, Transcript};
 
@@ -48,7 +48,7 @@ fn get_success_data(
 }
 
 #[derive(Clone)]
-pub struct ConsistentData {
+pub struct OneRunData {
     pub outcome: Option<SuccessData>,
     pub actual: FloatPoint,
     pub odometry_report: PoseReport,
@@ -63,7 +63,7 @@ pub struct ConsistentData {
     pub particle_filter: ParticleFilter,
 }
 
-impl ConsistentData {
+impl OneRunData {
     pub fn new(
         transcript: &Transcript,
         particle_filter: &ParticleFilter,
@@ -147,4 +147,9 @@ pub fn farthest_estimate(actual: &FloatPoint, particles: &ParticleFilter) -> f64
         .map(|p| p.estimated_pose().pos.euclidean_distance(*actual))
         .max_by(|dist1, dist2| dist1.partial_cmp(dist2).unwrap_or(Ordering::Equal))
         .unwrap()
+}
+
+pub struct MultiRunData {
+    pub data: Vec<OneRunData>,
+    pub settings: ParticleFilterSettings,
 }
