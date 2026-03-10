@@ -31,6 +31,10 @@ impl PoseReport {
             format!("{name} to actual: {:.2}m", self.distance),
         ]
     }
+
+    pub fn distance(&self) -> f64 {
+        self.distance
+    }
 }
 
 #[derive(Clone)]

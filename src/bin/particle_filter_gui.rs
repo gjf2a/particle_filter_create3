@@ -1,13 +1,16 @@
 use bit_grid::{
     BitGrid,
     angle::{Degrees, Radians},
-    point::GridPoint, pose::RobotPose,
+    point::GridPoint,
+    pose::RobotPose,
 };
+use chrono::Local;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 use enum_iterator::all;
 use particle_filter::{
-    BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings, SelectionStrategy, WeightStrategy
+    BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
+    SelectionStrategy, WeightStrategy,
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
@@ -134,13 +137,13 @@ impl MainApp {
     }
 
     fn settings(&self) -> anyhow::Result<ParticleFilterSettings> {
-        Ok(ParticleFilterSettings { 
-            noises: self.noises_from_ui()?, 
-            num_particles: self.num_particles.parse::<usize>()?, 
+        Ok(ParticleFilterSettings {
+            noises: self.noises_from_ui()?,
+            num_particles: self.num_particles.parse::<usize>()?,
             square_size_m: self.m_per_square.parse::<f64>()?,
-            robot_radius_m: CREATE3_RADIUS, 
-            selection_strategy: self.selection_strategy, 
-            weight_strategy: self.weight_strategy, 
+            robot_radius_m: CREATE3_RADIUS,
+            selection_strategy: self.selection_strategy,
+            weight_strategy: self.weight_strategy,
         })
     }
 
@@ -219,6 +222,7 @@ impl MainApp {
         let expr_data = self.expr_data.clone();
         let thread_running = self.thread_running.clone();
         let current_expr = self.current_expr.clone();
+        let filename = self.filename.clone();
         std::thread::spawn(move || {
             thread_running.store(true);
             for current in 0..num_exprs {
@@ -236,15 +240,24 @@ impl MainApp {
                             None => {
                                 *expr_data = Some(MultiRunData {
                                     data: vec![data_from_run.clone()],
-                                    settings
+                                    settings,
                                 });
                             }
                         }
                     }
-                }                
+                }
             }
             current_expr.store(None);
             thread_running.store(false);
+            let now = Local::now();
+            let csv_filename = format!("{filename}_{}.csv", now.format("%Y_%m_%d_%H_%M_%S"));
+            let csv = {
+                let expr_data = expr_data.lock().unwrap();
+                expr_data.as_ref().map_or(String::new(), |data| data.to_csv())
+            };
+            if let Err(e) = std::fs::write(csv_filename.as_str(), csv) {
+                println!("File I/O problem: {e}");
+            }
         });
         Ok(())
     }
@@ -511,6 +524,7 @@ impl ParticleFilterRunner {
         self.reset_status();
         let mut particle_filter = ParticleFilter::new(self.settings);
         let transcript = self.transcript.clone();
+        let mut num_completed = 0;
         for (i, sensor_info) in transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let elapsed = Instant::now().duration_since(start);
@@ -521,16 +535,13 @@ impl ParticleFilterRunner {
                     .obstacles()
                     .map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())),
             );
+            num_completed = i + 1;
             if let Some(failure) = particle_filter.example_failure() {
-                self.send_progress(
-                    i,
-                    elapsed,
-                    &failure,
-                );
+                self.send_progress(i, elapsed, &failure);
                 break;
             }
         }
-        self.completion_status(&particle_filter);
+        self.completion_status(num_completed, &particle_filter);
     }
 
     fn reset_status(&self) {
@@ -540,28 +551,31 @@ impl ParticleFilterRunner {
         }
     }
 
-    fn completion_status(&self, particle_filter: &ParticleFilter) {
+    fn completion_status(&self, final_iteration: usize, particle_filter: &ParticleFilter) {
         let stats = particle_filter.stats();
-        let packed_results = OneRunData::new(&self.transcript, &particle_filter, &stats, self.duration, self.mean_iteration_time, self.max_iteration_time);
+        let packed_results = OneRunData::new(
+            &self.transcript,
+            &particle_filter,
+            &stats,
+            self.duration,
+            self.mean_iteration_time,
+            self.max_iteration_time,
+            final_iteration,
+        );
         let mut status = self.status.lock().unwrap();
         if let Some(status) = &mut *status {
             status.results = Some(packed_results);
         }
     }
 
-    pub fn send_progress(
-        &mut self,
-        i: usize,
-        elapsed: Duration,
-        particle: &Particle,
-    ) {
+    pub fn send_progress(&mut self, i: usize, elapsed: Duration, particle: &Particle) {
         self.duration = elapsed.as_secs_f64();
         self.mean_iteration_time = 1000.0 * self.duration / i as f64;
         if i > 0 && self.mean_iteration_time > self.max_iteration_time {
             self.max_iteration_time = self.mean_iteration_time;
         }
         let message = format!(
-            "{}/{} ({:.2}s; {:.1}ms/iteration; longest {:.2}s)",
+            "{}/{} ({:.2}s; {:.1}ms/iteration; longest {:.2}ms)",
             i + 1,
             self.transcript.len(),
             self.duration,
