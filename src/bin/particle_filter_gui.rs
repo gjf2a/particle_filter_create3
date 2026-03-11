@@ -253,7 +253,9 @@ impl MainApp {
             let csv_filename = format!("{filename}_{}.csv", now.format("%Y_%m_%d_%H_%M_%S"));
             let csv = {
                 let expr_data = expr_data.lock().unwrap();
-                expr_data.as_ref().map_or(String::new(), |data| data.to_csv())
+                expr_data
+                    .as_ref()
+                    .map_or(String::new(), |data| data.to_csv())
             };
             if let Err(e) = std::fs::write(csv_filename.as_str(), csv) {
                 println!("File I/O problem: {e}");
