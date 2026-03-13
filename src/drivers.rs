@@ -173,8 +173,8 @@ impl MultiRunData {
                 self.settings.square_size_m,
                 self.settings.selection_strategy,
                 self.settings.weight_strategy,
-                self.settings.noises.odom.stdev_x_y,
-                self.settings.noises.odom.stdev_angle,
+                self.settings.noises.clear.stdev_x_y,
+                self.settings.noises.clear.stdev_angle,
                 self.settings.noises.obst.stdev_x_y,
                 self.settings.noises.obst.stdev_angle
             )

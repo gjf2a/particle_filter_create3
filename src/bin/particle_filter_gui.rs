@@ -378,7 +378,7 @@ impl MainApp {
 
     fn noises_from_ui(&self) -> anyhow::Result<Noises> {
         Ok(Noises {
-            odom: Noise {
+            clear: Noise {
                 stdev_x_y: self.clear_noise_xy.parse::<f64>()?,
                 stdev_angle: Degrees::new(self.clear_noise_theta.parse::<f64>()?),
             },
