@@ -535,7 +535,7 @@ impl ParticleFilterRunner {
                 sensor_info.odometry(),
                 sensor_info
                     .obstacles()
-                    .map(|bump| bump.bump_location(&particle_filter.last_raw_pose().unwrap())),
+                    .map(|bump| bump.obstacle_at()),
             );
             num_completed = i + 1;
             if let Some(failure) = particle_filter.example_failure() {

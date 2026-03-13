@@ -168,9 +168,8 @@ impl Bump {
         }
     }
 
-    pub fn bump_location(&self, pose: &RobotPose<Radians>) -> FloatPoint {
-        let heading = pose.theta + self.angle_offset();
-        pose.pos + (CREATE3_RADIUS, heading).into()
+    pub fn obstacle_at(&self) -> (f64, Radians) {
+        (CREATE3_RADIUS, self.angle_offset())
     }
 }
 
