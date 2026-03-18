@@ -90,12 +90,12 @@ fn f2py(f: f64) -> String {
 impl FromStr for SensorInfo {
     type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> anyhow::Result<Self> {
         match s.chars().next() {
             None => Err(anyhow::anyhow!("Bad input: Empty input")),
             Some(c) => match c {
                 '0'..='9' | '-' => Ok(Self::Pose(parse_pose(s.split_whitespace())?)),
-                '[' => Ok(Self::Bump(parse_bump(s)?)),
+                '[' => Ok(Self::Bump(s.parse::<Bump>()?)),
                 _ => Err(anyhow::anyhow!(
                     "Bad starting character: '{c}' in line '{s}'"
                 )),
@@ -125,29 +125,6 @@ fn parse_pose<'a, I: Iterator<Item = &'a str>>(values: I) -> anyhow::Result<Robo
     })
 }
 
-fn parse_bump(s: &str) -> anyhow::Result<Bump> {
-    let start = s
-        .find('\'')
-        .ok_or_else(|| anyhow::anyhow!("No starting '"))?
-        + 1;
-    let end = s
-        .rfind('\'')
-        .ok_or_else(|| anyhow::anyhow!("No ending '"))?;
-    let label = &s[start..end];
-    match label {
-        "bump_front_center" | "cliff_front_center" | "cliff_front_left', 'cliff_front_right" => {
-            Ok(Bump::FrontCenter)
-        }
-        "bump_front_left" | "cliff_front_left" | "cliff_side_left', 'cliff_front_left" => {
-            Ok(Bump::FrontLeft)
-        }
-        "bump_front_right" | "cliff_front_right" => Ok(Bump::FrontRight),
-        "bump_left" | "cliff_side_left" => Ok(Bump::Left),
-        "bump_right" | "cliff_side_right" => Ok(Bump::Right),
-        _ => Err(anyhow::anyhow!("Did not recognize '{label}'")),
-    }
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Bump {
     FrontCenter,
@@ -155,6 +132,33 @@ pub enum Bump {
     FrontRight,
     Left,
     Right,
+}
+
+impl FromStr for Bump {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        let start = s
+            .find('\'')
+            .ok_or_else(|| anyhow::anyhow!("No starting '"))?
+            + 1;
+        let end = s
+            .rfind('\'')
+            .ok_or_else(|| anyhow::anyhow!("No ending '"))?;
+        let label = &s[start..end];
+        match label {
+            "bump_front_center"
+            | "cliff_front_center"
+            | "cliff_front_left', 'cliff_front_right" => Ok(Bump::FrontCenter),
+            "bump_front_left" | "cliff_front_left" | "cliff_side_left', 'cliff_front_left" => {
+                Ok(Bump::FrontLeft)
+            }
+            "bump_front_right" | "cliff_front_right" => Ok(Bump::FrontRight),
+            "bump_left" | "cliff_side_left" => Ok(Bump::Left),
+            "bump_right" | "cliff_side_right" => Ok(Bump::Right),
+            _ => Err(anyhow::anyhow!("Did not recognize '{label}'")),
+        }
+    }
 }
 
 impl Bump {

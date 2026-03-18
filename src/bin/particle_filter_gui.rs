@@ -533,9 +533,7 @@ impl ParticleFilterRunner {
             self.send_progress(i, elapsed, particle);
             particle_filter.iterate(
                 sensor_info.odometry(),
-                sensor_info
-                    .obstacles()
-                    .map(|bump| bump.obstacle_at()),
+                sensor_info.obstacles().map(|bump| bump.obstacle_at()),
             );
             num_completed = i + 1;
             if let Some(failure) = particle_filter.example_failure() {
