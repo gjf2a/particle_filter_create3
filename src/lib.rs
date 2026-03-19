@@ -138,13 +138,8 @@ impl FromStr for Bump {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self> {
-        let start = s
-            .find('\'')
-            .ok_or_else(|| anyhow::anyhow!("No starting '"))?
-            + 1;
-        let end = s
-            .rfind('\'')
-            .ok_or_else(|| anyhow::anyhow!("No ending '"))?;
+        let start = s.find('\'').map_or(0, |i| i + 1);
+        let end = s.rfind('\'').unwrap_or(s.len());
         let label = &s[start..end];
         match label {
             "bump_front_center"
