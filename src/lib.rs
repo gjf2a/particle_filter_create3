@@ -79,9 +79,9 @@ fn f2py(f: f64) -> String {
     }
     for i in 1..=9 {
         let negexp = format!("e-{i}");
-        if s.ends_with(negexp.as_str()) {
+        if s.ends_with(&negexp) {
             let pynegexp = format!("e-0{i}");
-            s = s.replace(negexp.as_str(), pynegexp.as_str());
+            s = s.replace(&negexp, &pynegexp);
         }
     }
     s
