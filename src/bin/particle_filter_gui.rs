@@ -7,7 +7,7 @@ use bit_grid::{
 use chrono::Local;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
-use enum_iterator::all;
+use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
     SelectionStrategy, WeightStrategy,
@@ -74,6 +74,7 @@ struct MainApp {
     status: Arc<Mutex<Option<CurrentData>>>,
     expr_data: Arc<Mutex<Option<MultiRunData>>>,
     current_expr: Arc<AtomicCell<Option<usize>>>,
+    show_waypoints: WhichWaypoints,
 }
 
 #[derive(Clone)]
@@ -83,6 +84,23 @@ struct CurrentData {
     results: Option<OneRunData>,
     current_particle: usize,
     pose: RobotPose<Radians>,
+}
+
+#[derive(PartialEq, Eq, Copy, Clone, Sequence, Debug)]
+enum WhichWaypoints {
+    None,
+    Unvisited,
+    All,
+}
+
+impl WhichWaypoints {
+    fn waypoint_grid(&self, map: &BitGridMap, start: RobotPose<Radians>) -> BitGrid {
+        match self {
+            Self::None => BitGrid::default(),
+            Self::All => map.waypoint_grid(start),
+            Self::Unvisited => &map.waypoint_grid(start) & &map.unvisited(),
+        }
+    }
 }
 
 const FPS: f32 = 20.0;
@@ -129,6 +147,7 @@ impl MainApp {
             expr_data: Arc::new(Mutex::new(None)),
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
+            show_waypoints: WhichWaypoints::All,
         }
     }
 
@@ -180,10 +199,14 @@ impl MainApp {
                 Self::limited_text_edit(ui, &mut self.m_per_square);
             });
 
-            if !self.thread_running() && ui.button("Start").clicked() {
-                if let Err(e) = self.start() {
-                    ui.label(format!("{e}"));
-                }
+            if !self.thread_running() {
+                ui.horizontal(|ui| {
+                    if ui.button("Start").clicked() {
+                        if let Err(e) = self.start() {
+                            ui.label(format!("{e}"));
+                        }
+                    }
+                });
             }
 
             self.assess_progress(ui);
@@ -192,6 +215,8 @@ impl MainApp {
 
     fn render_choices(&mut self, ui: &mut Ui) {
         ui.vertical(|ui| {
+            ui.heading("Waypoint view");
+            Self::render_radios(ui, &mut self.show_waypoints, all::<WhichWaypoints>());
             ui.heading("Selection Strategy");
             Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
             ui.heading("Weight Calculation");
@@ -283,7 +308,7 @@ impl MainApp {
                 self.render_completed(ui, &data.clone(), status);
             } else {
                 self.render_progress(ui, &status.message, &status.map);
-                Self::render_map(ui, &status.map, status.pose);
+                Self::render_map(ui, &status.map, status.pose, self.show_waypoints);
             }
         }
     }
@@ -303,7 +328,7 @@ impl MainApp {
             data.particle_filter[status.current_particle].map(),
         );
         let particle = &data.particle_filter[status.current_particle];
-        Self::render_map(ui, particle.map(), particle.estimated_pose());
+        Self::render_map(ui, particle.map(), particle.estimated_pose(), self.show_waypoints);
     }
 
     fn render_map_selector(
@@ -416,7 +441,7 @@ impl MainApp {
         });
     }
 
-    fn render_map(ui: &mut Ui, map: &BitGridMap, pose: RobotPose<Radians>) {
+    fn render_map(ui: &mut Ui, map: &BitGridMap, pose: RobotPose<Radians>, show_waypoints: WhichWaypoints) {
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
                 map.height() as f32 * MAP_CELL_SIZE,
@@ -428,7 +453,7 @@ impl MainApp {
         let response_rect = response.rect;
         let bb = map.bounding_box();
         let frontier = map.open_frontier_spaces();
-        let waypoints = map.waypoint_grid(pose);
+        let waypoints = show_waypoints.waypoint_grid(map, pose);
         for (p, cell) in map.points() {
             let x_rect = ((p[1] - bb.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
             let y_rect = ((p[0] - bb.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
@@ -454,7 +479,7 @@ fn paint_cell(painter: &Painter, x_rect: f32, y_rect: f32, color: Color32) {
 
 fn cell_color(waypoints: &BitGrid, frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) -> Color32 {
     if waypoints.get(&p) && (cell == Cell::Space || cell == Cell::Unvisited) {
-        Color32::DARK_GREEN
+        Color32::GOLD
     } else if cell == Cell::Space {
         if frontier.get(&p) {
             Color32::CYAN
