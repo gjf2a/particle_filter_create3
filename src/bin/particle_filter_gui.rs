@@ -428,10 +428,11 @@ impl MainApp {
         let response_rect = response.rect;
         let bb = map.bounding_box();
         let frontier = map.open_frontier_spaces();
+        let waypoints = map.waypoint_grid(pose);
         for (p, cell) in map.points() {
             let x_rect = ((p[1] - bb.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
             let y_rect = ((p[0] - bb.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
-            let color = cell_color(&frontier, &shadow, cell, p);
+            let color = cell_color(&waypoints, &frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
     }
@@ -451,8 +452,10 @@ fn paint_cell(painter: &Painter, x_rect: f32, y_rect: f32, color: Color32) {
     painter.rect_filled(rect, CornerRadius::ZERO, color);
 }
 
-fn cell_color(frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) -> Color32 {
-    if cell == Cell::Space {
+fn cell_color(waypoints: &BitGrid, frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) -> Color32 {
+    if waypoints.get(&p) && (cell == Cell::Space || cell == Cell::Unvisited) {
+        Color32::DARK_GREEN
+    } else if cell == Cell::Space {
         if frontier.get(&p) {
             Color32::CYAN
         } else if shadow.get(&p) {
