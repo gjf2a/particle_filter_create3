@@ -147,7 +147,7 @@ impl MainApp {
             expr_data: Arc::new(Mutex::new(None)),
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
-            show_waypoints: WhichWaypoints::All,
+            show_waypoints: WhichWaypoints::None,
         }
     }
 
