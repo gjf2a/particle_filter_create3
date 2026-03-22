@@ -442,21 +442,22 @@ impl MainApp {
     }
 
     fn render_map(ui: &mut Ui, map: &BitGridMap, pose: RobotPose<Radians>, show_waypoints: WhichWaypoints) {
+        let bounds = map.bordered_bounding_box();
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
-                map.height() as f32 * MAP_CELL_SIZE,
-                map.width() as f32 * MAP_CELL_SIZE,
+                bounds.height() as f32 * MAP_CELL_SIZE,
+                bounds.width() as f32 * MAP_CELL_SIZE,
             ),
             egui::Sense::hover(),
         );
         let shadow = map.robot_shadow(pose);
         let response_rect = response.rect;
-        let bb = map.bounding_box();
         let frontier = map.open_frontier_spaces();
         let waypoints = show_waypoints.waypoint_grid(map, pose);
-        for (p, cell) in map.points() {
-            let x_rect = ((p[1] - bb.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
-            let y_rect = ((p[0] - bb.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
+        for p in bounds.coord_iter() {
+            let cell = map.cell_for(&p);
+            let x_rect = ((p[1] - bounds.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
+            let y_rect = ((p[0] - bounds.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
             let color = cell_color(&waypoints, &frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
@@ -479,7 +480,7 @@ fn paint_cell(painter: &Painter, x_rect: f32, y_rect: f32, color: Color32) {
 
 fn cell_color(waypoints: &BitGrid, frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) -> Color32 {
     if waypoints.get(&p) && (cell == Cell::Space || cell == Cell::Unvisited) {
-        Color32::GOLD
+        Color32::ORANGE
     } else if cell == Cell::Space {
         if frontier.get(&p) {
             Color32::CYAN
