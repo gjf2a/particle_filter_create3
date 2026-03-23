@@ -10,7 +10,7 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
-    SelectionStrategy, WeightStrategy,
+    SelectionStrategy, WeightStrategy, path_plan::waypoint_grid,
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
@@ -97,8 +97,8 @@ impl WhichWaypoints {
     fn waypoint_grid(&self, map: &BitGridMap, start: RobotPose<Radians>) -> BitGrid {
         match self {
             Self::None => BitGrid::default(),
-            Self::All => map.waypoint_grid(start),
-            Self::Unvisited => &map.waypoint_grid(start) & &map.unvisited(),
+            Self::All => waypoint_grid(map, start),
+            Self::Unvisited => &waypoint_grid(map, start) & &map.unvisited(),
         }
     }
 }
