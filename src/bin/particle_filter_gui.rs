@@ -249,6 +249,10 @@ impl MainApp {
         let current_expr = self.current_expr.clone();
         let filename = self.filename.clone();
         std::thread::spawn(move || {
+            {
+                let mut expr_data = expr_data.lock().unwrap();
+                *expr_data = None;
+            }
             thread_running.store(true);
             for current in 0..num_exprs {
                 current_expr.store(Some(current + 1));
