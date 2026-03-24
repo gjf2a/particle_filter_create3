@@ -10,7 +10,7 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
-    SelectionStrategy, WeightStrategy, path_plan::waypoint_grid,
+    SelectionStrategy, WeightStrategy, path_plan::{paths_from, waypoint_grid},
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
@@ -91,6 +91,7 @@ enum WhichWaypoints {
     None,
     Unvisited,
     All,
+    Path,
 }
 
 impl WhichWaypoints {
@@ -99,6 +100,13 @@ impl WhichWaypoints {
             Self::None => BitGrid::default(),
             Self::All => waypoint_grid(map, start),
             Self::Unvisited => &waypoint_grid(map, start) & &map.unvisited(),
+            Self::Path => {
+                let paths_back = paths_from(map, start);
+                match paths_back.shortest_path() {
+                    None => BitGrid::default(),
+                    Some(shortest) => shortest.iter().collect()
+                }
+            }
         }
     }
 }
@@ -142,7 +150,7 @@ impl MainApp {
             clear_noise_theta: "2e-4".to_string(),
             obst_noise_xy: "0.032".to_string(),
             obst_noise_theta: "0.62".to_string(),
-            num_exprs: "30".to_string(),
+            num_exprs: "100".to_string(),
             status: Arc::new(Mutex::new(None)),
             expr_data: Arc::new(Mutex::new(None)),
             thread_running: Arc::new(AtomicCell::new(false)),
@@ -236,7 +244,15 @@ impl MainApp {
                     }
                 }
             }
+            self.expr_success_failure(ui);
         });
+    }
+
+    fn expr_success_failure(&self, ui: &mut Ui) {
+        let expr_data = self.expr_data.lock().unwrap();
+        if let Some(expr_data) = expr_data.as_ref() {
+            ui.label(format!("{} successes, {} failures", expr_data.num_successes(), expr_data.num_failures()));
+        }
     }
 
     fn run_experiments(&self) -> anyhow::Result<()> {
@@ -615,14 +631,18 @@ impl ParticleFilterRunner {
             self.mean_iteration_time,
             self.max_iteration_time,
         );
-        let mut status = self.status.lock().unwrap();
-        let results = status.as_ref().and_then(|s| s.results.clone());
-        *status = Some(CurrentData {
-            message,
-            map: particle.map().clone(),
-            pose: particle.estimated_pose(),
-            results,
-            current_particle: 0,
-        });
+        match self.status.lock() {
+            Ok(mut status) => {
+                let results = status.as_ref().and_then(|s| s.results.clone());
+                *status = Some(CurrentData {
+                    message,
+                    map: particle.map().clone(),
+                    pose: particle.estimated_pose(),
+                    results,
+                    current_particle: 0,
+                });
+            }
+            Err(e) => println!("Thread error: {e}")
+        }
     }
 }
