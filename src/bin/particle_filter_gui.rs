@@ -11,7 +11,7 @@ use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
     SelectionStrategy, WeightStrategy,
-    path_plan::{paths_from, waypoint_grid},
+    path_plan::paths_from,
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
@@ -75,7 +75,7 @@ struct MainApp {
     status: Arc<Mutex<Option<CurrentData>>>,
     expr_data: Arc<Mutex<Option<MultiRunData>>>,
     current_expr: Arc<AtomicCell<Option<usize>>>,
-    show_waypoints: WhichWaypoints,
+    show_waypoints: PathsOut,
 }
 
 #[derive(Clone)]
@@ -88,25 +88,32 @@ struct CurrentData {
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Sequence, Debug)]
-enum WhichWaypoints {
+enum PathsOut {
     None,
-    Unvisited,
-    All,
-    Path,
+    ShortestPath,
+    AllPaths,
 }
 
-impl WhichWaypoints {
-    fn waypoint_grid(&self, map: &BitGridMap, start: RobotPose<Radians>) -> BitGrid {
+impl PathsOut {
+    fn path_out_grid(&self, map: &BitGridMap, start: RobotPose<Radians>) -> BitGrid {
         match self {
             Self::None => BitGrid::default(),
-            Self::All => waypoint_grid(map, start),
-            Self::Unvisited => &waypoint_grid(map, start) & &map.unvisited(),
-            Self::Path => {
+            Self::ShortestPath => {
                 let paths_back = paths_from(map, start);
                 match paths_back.shortest_path() {
                     None => BitGrid::default(),
                     Some(shortest) => shortest.iter().collect(),
                 }
+            }
+            Self::AllPaths => {
+                let paths_back = paths_from(map, start);
+                let mut grid = BitGrid::default();
+                for leaf in paths_back.leaves().ones() {
+                    for square in paths_back.path_to_start(leaf) {
+                        grid.set(square, true);
+                    }
+                }
+                grid
             }
         }
     }
@@ -156,7 +163,7 @@ impl MainApp {
             expr_data: Arc::new(Mutex::new(None)),
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
-            show_waypoints: WhichWaypoints::None,
+            show_waypoints: PathsOut::None,
         }
     }
 
@@ -224,8 +231,8 @@ impl MainApp {
 
     fn render_choices(&mut self, ui: &mut Ui) {
         ui.vertical(|ui| {
-            ui.heading("Waypoint view");
-            Self::render_radios(ui, &mut self.show_waypoints, all::<WhichWaypoints>());
+            ui.heading("View Paths Out");
+            Self::render_radios(ui, &mut self.show_waypoints, all::<PathsOut>());
             ui.heading("Selection Strategy");
             Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
             ui.heading("Weight Calculation");
@@ -475,7 +482,7 @@ impl MainApp {
         ui: &mut Ui,
         map: &BitGridMap,
         pose: RobotPose<Radians>,
-        show_waypoints: WhichWaypoints,
+        show_paths_out: PathsOut,
     ) {
         let bounds = map.bordered_bounding_box();
         let (response, painter) = ui.allocate_painter(
@@ -488,12 +495,12 @@ impl MainApp {
         let shadow = map.robot_shadow(pose);
         let response_rect = response.rect;
         let frontier = map.open_frontier_spaces();
-        let waypoints = show_waypoints.waypoint_grid(map, pose);
+        let paths_out = show_paths_out.path_out_grid(map, pose);
         for p in bounds.coord_iter() {
             let cell = map.cell_for(&p);
             let x_rect = ((p[1] - bounds.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
             let y_rect = ((p[0] - bounds.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
-            let color = cell_color(&waypoints, &frontier, &shadow, cell, p);
+            let color = cell_color(&paths_out, &frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
     }
