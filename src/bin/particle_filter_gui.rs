@@ -10,7 +10,8 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
-    SelectionStrategy, WeightStrategy, path_plan::{paths_from, waypoint_grid},
+    SelectionStrategy, WeightStrategy,
+    path_plan::{paths_from, waypoint_grid},
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
@@ -104,7 +105,7 @@ impl WhichWaypoints {
                 let paths_back = paths_from(map, start);
                 match paths_back.shortest_path() {
                     None => BitGrid::default(),
-                    Some(shortest) => shortest.iter().collect()
+                    Some(shortest) => shortest.iter().collect(),
                 }
             }
         }
@@ -251,7 +252,11 @@ impl MainApp {
     fn expr_success_failure(&self, ui: &mut Ui) {
         let expr_data = self.expr_data.lock().unwrap();
         if let Some(expr_data) = expr_data.as_ref() {
-            ui.label(format!("{} successes, {} failures", expr_data.num_successes(), expr_data.num_failures()));
+            ui.label(format!(
+                "{} successes, {} failures",
+                expr_data.num_successes(),
+                expr_data.num_failures()
+            ));
         }
     }
 
@@ -348,7 +353,12 @@ impl MainApp {
             data.particle_filter[status.current_particle].map(),
         );
         let particle = &data.particle_filter[status.current_particle];
-        Self::render_map(ui, particle.map(), particle.estimated_pose(), self.show_waypoints);
+        Self::render_map(
+            ui,
+            particle.map(),
+            particle.estimated_pose(),
+            self.show_waypoints,
+        );
     }
 
     fn render_map_selector(
@@ -461,7 +471,12 @@ impl MainApp {
         });
     }
 
-    fn render_map(ui: &mut Ui, map: &BitGridMap, pose: RobotPose<Radians>, show_waypoints: WhichWaypoints) {
+    fn render_map(
+        ui: &mut Ui,
+        map: &BitGridMap,
+        pose: RobotPose<Radians>,
+        show_waypoints: WhichWaypoints,
+    ) {
         let bounds = map.bordered_bounding_box();
         let (response, painter) = ui.allocate_painter(
             Vec2::new(
@@ -498,7 +513,13 @@ fn paint_cell(painter: &Painter, x_rect: f32, y_rect: f32, color: Color32) {
     painter.rect_filled(rect, CornerRadius::ZERO, color);
 }
 
-fn cell_color(waypoints: &BitGrid, frontier: &BitGrid, shadow: &BitGrid, cell: Cell, p: GridPoint) -> Color32 {
+fn cell_color(
+    waypoints: &BitGrid,
+    frontier: &BitGrid,
+    shadow: &BitGrid,
+    cell: Cell,
+    p: GridPoint,
+) -> Color32 {
     if waypoints.get(&p) && (cell == Cell::Space || cell == Cell::Unvisited) {
         Color32::ORANGE
     } else if cell == Cell::Space {
@@ -642,7 +663,7 @@ impl ParticleFilterRunner {
                     current_particle: 0,
                 });
             }
-            Err(e) => println!("Thread error: {e}")
+            Err(e) => println!("Thread error: {e}"),
         }
     }
 }

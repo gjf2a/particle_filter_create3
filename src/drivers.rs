@@ -177,51 +177,47 @@ impl MultiRunData {
     pub fn to_csv(&self) -> String {
         let mut csv = String::new();
         csv.push_str("num_particles,robot_radius_m,square_size_m,selection_strategy,weight_strategy,clear_x_y_noise,clear_theta_noise,collide_x_y_noise,collide_theta_noise\n");
-        csv.push_str(
-            &format!(
-                "{},{},{},{:?},{:?},{},{},{},{}\n\n",
-                self.settings.num_particles,
-                self.settings.robot_radius_m,
-                self.settings.square_size_m,
-                self.settings.selection_strategy,
-                self.settings.weight_strategy,
-                self.settings.noises.clear.stdev_x_y,
-                self.settings.noises.clear.stdev_angle,
-                self.settings.noises.obst.stdev_x_y,
-                self.settings.noises.obst.stdev_angle
-            )
-        );
+        csv.push_str(&format!(
+            "{},{},{},{:?},{:?},{},{},{},{}\n\n",
+            self.settings.num_particles,
+            self.settings.robot_radius_m,
+            self.settings.square_size_m,
+            self.settings.selection_strategy,
+            self.settings.weight_strategy,
+            self.settings.noises.clear.stdev_x_y,
+            self.settings.noises.clear.stdev_angle,
+            self.settings.noises.obst.stdev_x_y,
+            self.settings.noises.obst.stdev_angle
+        ));
         csv.push_str("succeeds,num_iterations,transcript_length,duration,mean_iteration_time,max_iteration_time,closest_particle_rank,closest_particle_to_actual,best_particle_to_actual,farthest_particle_to_actual,odometry_to_actual,open_frontier,all_frontier,all_space,num_obstacles\n");
         for row in self.data.iter() {
-            csv.push_str(
-                &match row.outcome.as_ref() {
-                    None => format!(
-                        "0,{},{},{},{},{}\n",
-                        row.final_iteration,
-                        row.transcript_len,
-                        row.duration,
-                        row.mean_iteration_time,
-                        row.max_iteration_time
-                    ),
-                    Some(outcome) => format!(
-                        "1,{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
-                        row.final_iteration,
-                        row.transcript_len,
-                        row.duration,
-                        row.mean_iteration_time,
-                        row.max_iteration_time,
-                        outcome.closest_rank,
-                        outcome.closest_to_actual.distance(),
-                        outcome.best_particle_to_actual.distance(),
-                        outcome.farthest_to_actual,
-                        row.odometry_report.distance(),
-                        outcome.map.open_frontier_spaces().count_ones(),
-                        outcome.map.all_frontier_spaces().count_ones(),
-                        outcome.map.num_spaces(),
-                        outcome.map.num_obstacles()
-                    ),
-                }
-            );
+            csv.push_str(&match row.outcome.as_ref() {
+                None => format!(
+                    "0,{},{},{},{},{}\n",
+                    row.final_iteration,
+                    row.transcript_len,
+                    row.duration,
+                    row.mean_iteration_time,
+                    row.max_iteration_time
+                ),
+                Some(outcome) => format!(
+                    "1,{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                    row.final_iteration,
+                    row.transcript_len,
+                    row.duration,
+                    row.mean_iteration_time,
+                    row.max_iteration_time,
+                    outcome.closest_rank,
+                    outcome.closest_to_actual.distance(),
+                    outcome.best_particle_to_actual.distance(),
+                    outcome.farthest_to_actual,
+                    row.odometry_report.distance(),
+                    outcome.map.open_frontier_spaces().count_ones(),
+                    outcome.map.all_frontier_spaces().count_ones(),
+                    outcome.map.num_spaces(),
+                    outcome.map.num_obstacles()
+                ),
+            });
         }
         csv
     }
