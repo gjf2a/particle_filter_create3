@@ -10,8 +10,7 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
-    SelectionStrategy, WeightStrategy,
-    path_plan::paths_from,
+    SelectionStrategy, WeightStrategy, path_plan::paths_from,
 };
 use particle_filter_create3::{
     CREATE3_RADIUS, cell2color,
