@@ -162,6 +162,18 @@ pub struct MultiRunData {
 }
 
 impl MultiRunData {
+    pub fn num_runs(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn num_successes(&self) -> usize {
+        self.data.iter().filter(|d| d.outcome.is_some()).count()
+    }
+
+    pub fn num_failures(&self) -> usize {
+        self.num_runs() - self.num_successes()
+    }
+
     pub fn to_csv(&self) -> String {
         let mut csv = String::new();
         csv.push_str("num_particles,robot_radius_m,square_size_m,selection_strategy,weight_strategy,clear_x_y_noise,clear_theta_noise,collide_x_y_noise,collide_theta_noise\n");
