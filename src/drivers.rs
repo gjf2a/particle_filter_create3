@@ -189,7 +189,7 @@ impl MultiRunData {
             self.settings.noises.obst.stdev_x_y,
             self.settings.noises.obst.stdev_angle
         ));
-        csv.push_str("succeeds,num_iterations,transcript_length,duration,mean_iteration_time,max_iteration_time,closest_particle_rank,closest_particle_to_actual,best_particle_to_actual,farthest_particle_to_actual,odometry_to_actual,open_frontier,all_frontier,all_space,num_obstacles\n");
+        csv.push_str("succeeds,num_iterations,transcript_length,duration,mean_iteration_time,max_iteration_time,closest_particle_rank,closest_particle_to_actual,best_particle_to_actual,farthest_particle_to_actual,odometry_to_actual,open_frontier,all_frontier,all_space,num_obstacles,map_area\n");
         for row in self.data.iter() {
             csv.push_str(&match row.outcome.as_ref() {
                 None => format!(
@@ -201,7 +201,7 @@ impl MultiRunData {
                     row.max_iteration_time
                 ),
                 Some(outcome) => format!(
-                    "1,{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                    "1,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
                     row.final_iteration,
                     row.transcript_len,
                     row.duration,
@@ -215,7 +215,8 @@ impl MultiRunData {
                     outcome.map.open_frontier_spaces().count_ones(),
                     outcome.map.all_frontier_spaces().count_ones(),
                     outcome.map.num_spaces(),
-                    outcome.map.num_obstacles()
+                    outcome.map.num_obstacles(),
+                    outcome.map.area(),
                 ),
             });
         }
