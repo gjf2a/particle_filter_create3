@@ -5,6 +5,7 @@ use hash_histogram::HashHistogram;
 use particle_filter::{
     BitGridMap, BitGridStats, Inconsistency, ParticleFilter, ParticleFilterSettings,
 };
+use stats_ci::{Confidence, Interval, proportion};
 
 use crate::odometry_transcripts::{PoseReport, Transcript};
 
@@ -174,6 +175,11 @@ impl MultiRunData {
         self.num_runs() - self.num_successes()
     }
 
+    pub fn confidence_interval_success(&self) -> Interval<f64> {
+        let confidence = Confidence::new(0.95);
+        proportion::ci(confidence, self.data.len(), self.num_successes()).unwrap()
+    }
+
     pub fn to_csv(&self) -> String {
         let mut csv = String::new();
         csv.push_str("num_particles,robot_radius_m,square_size_m,selection_strategy,weight_strategy,clear_x_y_noise,clear_theta_noise,collide_x_y_noise,collide_theta_noise\n");
@@ -220,6 +226,11 @@ impl MultiRunData {
                 ),
             });
         }
+        csv.push_str(",,,,,,,,,,,,,,,\n");
+        csv.push_str(&format!("{},,,,,,,,,,,,,,,\n", self.num_successes()));
+        let ci = self.confidence_interval_success();
+        csv.push_str(&format!("{},,,,,,,,,,,,,,,\n", ci.low().unwrap()));
+        csv.push_str(&format!("{},,,,,,,,,,,,,,,\n", ci.high().unwrap()));
         csv
     }
 }

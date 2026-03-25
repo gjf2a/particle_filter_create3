@@ -232,10 +232,14 @@ impl MainApp {
         ui.vertical(|ui| {
             ui.heading("View Paths Out");
             Self::render_radios(ui, &mut self.show_waypoints, all::<PathsOut>());
-            ui.heading("Selection Strategy");
-            Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
             ui.heading("Weight Calculation");
             Self::render_radios(ui, &mut self.weight_strategy, all::<WeightStrategy>());
+            if self.weight_strategy == WeightStrategy::Uniform {
+                self.selection_strategy = SelectionStrategy::Weighted;
+            } else {
+                ui.heading("Selection Strategy");
+                Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
+            }
             if self.thread_running() {
                 self.current_expr.load().map(|current_expr| {
                     ui.label(format!("{current_expr}/{}", self.num_exprs));
