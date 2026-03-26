@@ -5,7 +5,7 @@ use hash_histogram::HashHistogram;
 use particle_filter::{
     BitGridMap, BitGridStats, Inconsistency, ParticleFilter, ParticleFilterSettings,
 };
-use stats_ci::{Confidence, Interval, proportion};
+use stats_ci::{Confidence, proportion};
 
 use crate::odometry_transcripts::{PoseReport, Transcript};
 
@@ -250,6 +250,6 @@ impl ConfIntervalConsistency {
         let hi_f = interval.high_f();
         let lo = (population as f64 * lo_f) as usize;
         let hi = (population as f64 * hi_f) as usize;
-        Ok(Self {lo, hi, lo_f, hi_f})
+        Ok(Self { lo, hi, lo_f, hi_f })
     }
 }
