@@ -122,25 +122,23 @@ const FPS: f32 = 20.0;
 const FRAME_INTERVAL: f32 = 1.0 / FPS;
 
 impl eframe::App for MainApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading(format!(
-                "Particle Filter: {}; Duration {:.2}s",
-                self.filename,
-                self.transcript.total_time_seconds()
-            ));
-            ui.horizontal(|ui| {
-                self.render_settings(ui);
-                self.render_choices(ui);
-                let status = self.status.lock().unwrap();
-                if let Some(status) = &*status {
-                    if let Some(results) = &status.results {
-                        Self::render_results(ui, results);
-                    }
+    fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+        ui.heading(format!(
+            "Particle Filter: {}; Duration {:.2}s",
+            self.filename,
+            self.transcript.total_time_seconds()
+        ));
+        ui.horizontal(|ui| {
+            self.render_settings(ui);
+            self.render_choices(ui);
+            let status = self.status.lock().unwrap();
+            if let Some(status) = &*status {
+                if let Some(results) = &status.results {
+                    Self::render_results(ui, results);
                 }
-            });
-            ctx.request_repaint_after_secs(FRAME_INTERVAL);
+            }
         });
+        ui.request_repaint_after_secs(FRAME_INTERVAL);
     }
 }
 
@@ -270,7 +268,13 @@ impl MainApp {
             if expr_data.num_failures() >= 2 {
                 match expr_data.confidence_interval_success() {
                     Err(e) => ui.label(format!("Error {e} when computing confidence interval")),
-                    Ok(interval) => ui.label(format!("{} ({:.1}%) ... {} ({:.1}%)", interval.lo, 100.0 * interval.lo_f, interval.hi, 100.0 * interval.hi_f)),
+                    Ok(interval) => ui.label(format!(
+                        "{} ({:.1}%) ... {} ({:.1}%)",
+                        interval.lo,
+                        100.0 * interval.lo_f,
+                        interval.hi,
+                        100.0 * interval.hi_f
+                    )),
                 };
             }
         }
