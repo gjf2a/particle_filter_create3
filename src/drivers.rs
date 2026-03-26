@@ -175,9 +175,8 @@ impl MultiRunData {
         self.num_runs() - self.num_successes()
     }
 
-    pub fn confidence_interval_success(&self) -> Interval<f64> {
-        let confidence = Confidence::new(0.95);
-        proportion::ci(confidence, self.data.len(), self.num_successes()).unwrap()
+    pub fn confidence_interval_success(&self) -> anyhow::Result<ConfIntervalConsistency> {
+        ConfIntervalConsistency::new(0.95, self.data.len(), self.num_successes())
     }
 
     pub fn to_csv(&self) -> String {
@@ -228,9 +227,29 @@ impl MultiRunData {
         }
         csv.push_str(",,,,,,,,,,,,,,,\n");
         csv.push_str(&format!("{},,,,,,,,,,,,,,,\n", self.num_successes()));
-        let ci = self.confidence_interval_success();
-        csv.push_str(&format!("{},,,,,,,,,,,,,,,\n", ci.low().unwrap()));
-        csv.push_str(&format!("{},,,,,,,,,,,,,,,\n", ci.high().unwrap()));
+        let ci = self.confidence_interval_success().unwrap();
+        csv.push_str(&format!("{},{},,,,,,,,,,,,,,\n", ci.lo_f, ci.lo));
+        csv.push_str(&format!("{},{},,,,,,,,,,,,,,\n", ci.hi_f, ci.hi));
         csv
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ConfIntervalConsistency {
+    pub lo: usize,
+    pub hi: usize,
+    pub lo_f: f64,
+    pub hi_f: f64,
+}
+
+impl ConfIntervalConsistency {
+    pub fn new(confidence: f64, population: usize, successes: usize) -> anyhow::Result<Self> {
+        let confidence = Confidence::new(confidence);
+        let interval = proportion::ci(confidence, population, successes)?;
+        let lo_f = interval.low_f();
+        let hi_f = interval.high_f();
+        let lo = (population as f64 * lo_f) as usize;
+        let hi = (population as f64 * hi_f) as usize;
+        Ok(Self {lo, hi, lo_f, hi_f})
     }
 }

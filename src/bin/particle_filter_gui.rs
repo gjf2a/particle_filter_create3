@@ -267,6 +267,12 @@ impl MainApp {
                 expr_data.num_successes(),
                 expr_data.num_failures()
             ));
+            if expr_data.num_failures() >= 2 {
+                match expr_data.confidence_interval_success() {
+                    Err(e) => ui.label(format!("Error {e} when computing confidence interval")),
+                    Ok(interval) => ui.label(format!("{} ({:.1}%) ... {} ({:.1}%)", interval.lo, 100.0 * interval.lo_f, interval.hi, 100.0 * interval.hi_f)),
+                };
+            }
         }
     }
 
