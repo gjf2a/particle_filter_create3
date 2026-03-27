@@ -227,9 +227,10 @@ impl MultiRunData {
         }
         csv.push_str(",,,,,,,,,,,,,,,\n");
         csv.push_str(&format!("{},,,,,,,,,,,,,,,\n", self.num_successes()));
-        let ci = self.confidence_interval_success().unwrap();
-        csv.push_str(&format!("{},{},,,,,,,,,,,,,,\n", ci.lo_f, ci.lo));
-        csv.push_str(&format!("{},{},,,,,,,,,,,,,,\n", ci.hi_f, ci.hi));
+        if let Ok(ci) = self.confidence_interval_success() {
+            csv.push_str(&format!("{},{},,,,,,,,,,,,,,\n", ci.lo_f, ci.lo));
+            csv.push_str(&format!("{},{},,,,,,,,,,,,,,\n", ci.hi_f, ci.hi));
+        }
         csv
     }
 }

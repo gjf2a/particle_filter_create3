@@ -123,6 +123,8 @@ const FRAME_INTERVAL: f32 = 1.0 / FPS;
 
 impl eframe::App for MainApp {
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+        ui.set_visuals(egui::Visuals::light());
+
         ui.heading(format!(
             "Particle Filter: {}; Duration {:.2}s",
             self.filename,
@@ -155,7 +157,7 @@ impl MainApp {
             clear_noise_theta: "2e-4".to_string(),
             obst_noise_xy: "0.032".to_string(),
             obst_noise_theta: "0.62".to_string(),
-            num_exprs: "100".to_string(),
+            num_exprs: "500".to_string(),
             status: Arc::new(Mutex::new(None)),
             expr_data: Arc::new(Mutex::new(None)),
             thread_running: Arc::new(AtomicCell::new(false)),
@@ -230,31 +232,44 @@ impl MainApp {
         ui.vertical(|ui| {
             ui.heading("View Paths Out");
             Self::render_radios(ui, &mut self.show_waypoints, all::<PathsOut>());
-            ui.heading("Weight Calculation");
-            Self::render_radios(ui, &mut self.weight_strategy, all::<WeightStrategy>());
-            if self.weight_strategy == WeightStrategy::Uniform {
-                self.selection_strategy = SelectionStrategy::Weighted;
-            } else {
-                ui.heading("Selection Strategy");
-                Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
-            }
             if self.thread_running() {
-                self.current_expr.load().map(|current_expr| {
-                    ui.label(format!("{current_expr}/{}", self.num_exprs));
-                });
+                self.render_expr_in_progress(ui);
             } else {
-                ui.horizontal(|ui| {
-                    ui.label("Number of Runs");
-                    Self::limited_text_edit(ui, &mut self.num_exprs);
-                });
-                if ui.button("Experiments").clicked() {
-                    if let Err(e) = self.run_experiments() {
-                        ui.label(format!("Experiments error: {e}"));
-                    }
-                }
+                self.render_expr_not_running(ui);
             }
             self.expr_success_failure(ui);
         });
+    }
+
+    fn render_expr_in_progress(&self, ui: &mut Ui) {
+        ui.heading(&format!("Weight Calculation: {:?}", self.weight_strategy));
+        ui.heading(&format!(
+            "Selection Strategy: {:?}",
+            self.selection_strategy
+        ));
+        self.current_expr.load().map(|current_expr| {
+            ui.label(format!("{current_expr}/{}", self.num_exprs));
+        });
+    }
+
+    fn render_expr_not_running(&mut self, ui: &mut Ui) {
+        ui.heading("Weight Calculation");
+        Self::render_radios(ui, &mut self.weight_strategy, all::<WeightStrategy>());
+        if self.weight_strategy == WeightStrategy::Uniform {
+            self.selection_strategy = SelectionStrategy::Weighted;
+        } else {
+            ui.heading("Selection Strategy");
+            Self::render_radios(ui, &mut self.selection_strategy, all::<SelectionStrategy>());
+        }
+        ui.horizontal(|ui| {
+            ui.label("Number of Runs");
+            Self::limited_text_edit(ui, &mut self.num_exprs);
+        });
+        if ui.button("Experiments").clicked() {
+            if let Err(e) = self.run_experiments() {
+                ui.label(format!("Experiments error: {e}"));
+            }
+        }
     }
 
     fn expr_success_failure(&self, ui: &mut Ui) {
@@ -265,7 +280,7 @@ impl MainApp {
                 expr_data.num_successes(),
                 expr_data.num_failures()
             ));
-            if expr_data.num_failures() >= 2 {
+            if expr_data.num_successes() >= 2 && expr_data.num_failures() >= 2 {
                 match expr_data.confidence_interval_success() {
                     Err(e) => ui.label(format!("Error {e} when computing confidence interval")),
                     Ok(interval) => ui.label(format!(
@@ -299,39 +314,60 @@ impl MainApp {
                 current_expr.store(Some(current + 1));
                 let mut runner = runner.clone();
                 runner.run();
-                let status = status.lock().unwrap();
-                if let Some(status) = status.as_ref() {
-                    if let Some(data_from_run) = &status.results {
-                        let mut expr_data = expr_data.lock().unwrap();
-                        match expr_data.as_mut() {
-                            Some(expr_data) => {
-                                expr_data.data.push(data_from_run.clone());
-                            }
-                            None => {
-                                *expr_data = Some(MultiRunData {
-                                    data: vec![data_from_run.clone()],
-                                    settings,
-                                });
-                            }
-                        }
-                    }
-                }
+                Self::update_experiment_status(status.clone(), expr_data.clone(), &settings);
             }
             current_expr.store(None);
             thread_running.store(false);
-            let now = Local::now();
-            let csv_filename = format!("{filename}_{}.csv", now.format("%Y_%m_%d_%H_%M_%S"));
-            let csv = {
-                let expr_data = expr_data.lock().unwrap();
-                expr_data
-                    .as_ref()
-                    .map_or(String::new(), |data| data.to_csv())
-            };
-            if let Err(e) = std::fs::write(csv_filename.as_str(), csv) {
-                println!("File I/O problem: {e}");
-            }
+            Self::output_csv(&filename, expr_data.clone());
         });
         Ok(())
+    }
+
+    fn update_experiment_status(
+        status: Arc<Mutex<Option<CurrentData>>>,
+        expr_data: Arc<Mutex<Option<MultiRunData>>>,
+        settings: &ParticleFilterSettings,
+    ) {
+        let status = status.lock().unwrap();
+        if let Some(status) = status.as_ref() {
+            if let Some(data_from_run) = &status.results {
+                let mut expr_data = expr_data.lock().unwrap();
+                match expr_data.as_mut() {
+                    Some(expr_data) => {
+                        expr_data.data.push(data_from_run.clone());
+                    }
+                    None => {
+                        *expr_data = Some(MultiRunData {
+                            data: vec![data_from_run.clone()],
+                            settings: settings.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    fn output_csv(filename: &str, expr_data: Arc<Mutex<Option<MultiRunData>>>) {
+        let now = Local::now();
+        let (csv_filename, csv) = {
+            let expr_data = expr_data.lock().unwrap();
+            match expr_data.as_ref() {
+                None => return,
+                Some(expr_data) => (
+                    format!(
+                        "{filename}_{}_{:?}_{:?}_{}.csv",
+                        expr_data.settings.num_particles,
+                        expr_data.settings.weight_strategy,
+                        expr_data.settings.selection_strategy,
+                        now.format("%Y_%m_%d_%H_%M_%S")
+                    ),
+                    expr_data.to_csv(),
+                ),
+            }
+        };
+        if let Err(e) = std::fs::write(csv_filename.as_str(), csv) {
+            println!("File I/O problem: {e}");
+        }
     }
 
     fn render_radios<S: Iterator<Item = T>, T: Eq + Copy + Debug>(
