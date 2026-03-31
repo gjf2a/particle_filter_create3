@@ -10,10 +10,10 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
-    SelectionStrategy, WeightStrategy, path_plan::paths_from,
+    SelectionStrategy, WeightStrategy, path_plan::paths_from, irobot_create3
 };
 use particle_filter_create3::{
-    CREATE3_RADIUS, cell2color,
+    cell2color,
     drivers::{MultiRunData, OneRunData, SuccessData},
     odometry_transcripts::Transcript,
 };
@@ -175,7 +175,7 @@ impl MainApp {
             noises: self.noises_from_ui()?,
             num_particles: self.num_particles.parse::<usize>()?,
             square_size_m: self.m_per_square.parse::<f64>()?,
-            robot_radius_m: CREATE3_RADIUS,
+            robot_radius_m: irobot_create3::RADIUS_M,
             selection_strategy: self.selection_strategy,
             weight_strategy: self.weight_strategy,
         })
