@@ -8,7 +8,7 @@ particle_filter = {git = "https://github.com/gjf2a/particle_filter"}
 bit_grid = {git = "https://github.com/gjf2a/bit_grid"}
 anyhow = "1.0.101"
 ryu = "1.0.23"
-eframe = "0.34.0"
+eframe = { version = "0.34.1", features = ["default_fonts", "glow"] }
 hash_histogram = "0.14.0"
 enum-iterator = "2"
 crossbeam-utils = "0.8.21"

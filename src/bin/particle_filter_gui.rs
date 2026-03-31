@@ -43,6 +43,7 @@ pub fn main() {
             })
             .with_position(Pos2 { x: 50.0, y: 25.0 })
             .with_drag_and_drop(true),
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
     eframe::run_native(
