@@ -5,7 +5,7 @@ use std::{fmt::Display, str::FromStr};
 
 use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use eframe::egui::Color32;
-use particle_filter::{Cell, irobot_create3::Bump};
+use particle_filter::{Cell, MapInput, irobot_create3::Bump};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {
@@ -25,6 +25,16 @@ impl SensorInfo {
         match self {
             Self::Pose(_) => None,
             Self::Bump(bump) => Some(bump),
+        }
+    }
+
+    pub fn map_input(&self) -> MapInput {
+        match self {
+            Self::Pose(pose) => MapInput::Pose(*pose),
+            Self::Bump(bump) => {
+                let (distance, heading) = bump.obstacle_at();
+                MapInput::Obstacle(distance, heading)
+            }
         }
     }
 }
