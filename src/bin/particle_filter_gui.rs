@@ -99,14 +99,14 @@ impl PathsOut {
         match self {
             Self::None => BitGrid::default(),
             Self::ShortestPath => {
-                let paths_back = PathsBackTo::new(map, start);
+                let paths_back = PathsBackTo::any(map, start);
                 match paths_back.shortest_path() {
                     None => BitGrid::default(),
                     Some(shortest) => shortest.iter().collect(),
                 }
             }
             Self::AllPaths => {
-                let paths_back = PathsBackTo::new(map, start);
+                let paths_back = PathsBackTo::all(map, start);
                 let mut grid = BitGrid::default();
                 for leaf in paths_back.leaves().ones() {
                     for square in paths_back.path_to_start(leaf) {
