@@ -10,7 +10,7 @@ use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui
 use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
-    SelectionStrategy, WeightStrategy, path_plan::paths_from, irobot_create3
+    SelectionStrategy, WeightStrategy, irobot_create3, path_plan::PathsBackTo,
 };
 use particle_filter_create3::{
     cell2color,
@@ -99,14 +99,14 @@ impl PathsOut {
         match self {
             Self::None => BitGrid::default(),
             Self::ShortestPath => {
-                let paths_back = paths_from(map, start);
+                let paths_back = PathsBackTo::any(map, start);
                 match paths_back.shortest_path() {
                     None => BitGrid::default(),
                     Some(shortest) => shortest.iter().collect(),
                 }
             }
             Self::AllPaths => {
-                let paths_back = paths_from(map, start);
+                let paths_back = PathsBackTo::all(map, start);
                 let mut grid = BitGrid::default();
                 for leaf in paths_back.leaves().ones() {
                     for square in paths_back.path_to_start(leaf) {
@@ -179,6 +179,7 @@ impl MainApp {
             robot_radius_m: irobot_create3::RADIUS_M,
             selection_strategy: self.selection_strategy,
             weight_strategy: self.weight_strategy,
+            save_inputs: false,
         })
     }
 
@@ -658,10 +659,7 @@ impl ParticleFilterRunner {
             let particle = particle_filter.particles().next().unwrap();
             let elapsed = Instant::now().duration_since(start);
             self.send_progress(i, elapsed, particle);
-            particle_filter.iterate(
-                sensor_info.odometry(),
-                sensor_info.obstacles().map(|bump| bump.obstacle_at()),
-            );
+            particle_filter.iterate(sensor_info.map_input());
             num_completed = i + 1;
             if let Some(failure) = particle_filter.example_failure() {
                 self.send_progress(i, elapsed, &failure);

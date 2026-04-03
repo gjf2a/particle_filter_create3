@@ -1,5 +1,5 @@
-use std::{env, str::FromStr};
 use stats_ci::{Confidence, StatisticsOps, mean, proportion, quantile};
+use std::{env, str::FromStr};
 
 fn main() {
     let args = env::args().collect::<Vec<_>>();
@@ -7,11 +7,21 @@ fn main() {
         println!("Usage: csv_conf_intervals [-ci=confidence] file1.csv [file2.csv...]");
     } else {
         let mut confidence = 0.95;
-        println!("| File | Success | # Iterations | Transcript Length | Duration | Mean Iteration | Max Iteration | Closest Particle Rank | Closest to Actual | Best to Actual | Farthest to Actual | Odometry to Actual |");
-        println!("|------|---------|--------------|-------------------|----------|----------------|---------------|-----------------------|-------------------|----------------|--------------------|--------------------|");
+        println!(
+            "| File | Success | # Iterations | Transcript Length | Duration | Mean Iteration | Max Iteration | Closest Particle Rank | Closest to Actual | Best to Actual | Farthest to Actual | Odometry to Actual |"
+        );
+        println!(
+            "|------|---------|--------------|-------------------|----------|----------------|---------------|-----------------------|-------------------|----------------|--------------------|--------------------|"
+        );
         for filename in args.iter().skip(1) {
             if filename.starts_with("-ci") {
-                confidence = filename.split('=').skip(1).next().unwrap().parse::<f64>().unwrap();
+                confidence = filename
+                    .split('=')
+                    .skip(1)
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap();
             } else if let Err(e) = handle_filename(filename, confidence) {
                 eprintln!("Error {e} processing {filename}");
             }
@@ -21,7 +31,12 @@ fn main() {
 
 fn handle_filename(filename: &str, confidence: f64) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(&filename)?;
-    let rows: Vec<Row> = contents.lines().skip_while(|line| !(line.starts_with("0,") || line.starts_with("1,"))).take_while(|line| line.starts_with("0,") || line.starts_with("1,")).map(|line| line.parse::<Row>()).collect::<Result<Vec<Row>, _>>()?;
+    let rows: Vec<Row> = contents
+        .lines()
+        .skip_while(|line| !(line.starts_with("0,") || line.starts_with("1,")))
+        .take_while(|line| line.starts_with("0,") || line.starts_with("1,"))
+        .map(|line| line.parse::<Row>())
+        .collect::<Result<Vec<Row>, _>>()?;
     print!("| {filename} | ");
     show_conf_intervals(&rows, confidence)?;
     Ok(())
@@ -42,13 +57,37 @@ fn show_conf_intervals(rows: &Vec<Row>, confidence: f64) -> anyhow::Result<()> {
     print!("[{lo:.2}:{hi:.2}] | ");
     let (lo, hi) = mean_conf_interval(confidence, rows, |r| Some(r.max_iteration_time))?;
     print!("[{lo:.2}:{hi:.2}] | ");
-    let (lo, hi) = median_conf_interval(confidence, rows, |r| if r.success {Some(r.closest_particle_rank)} else {None})?;
+    let (lo, hi) = median_conf_interval(confidence, rows, |r| {
+        if r.success {
+            Some(r.closest_particle_rank)
+        } else {
+            None
+        }
+    })?;
     print!("[{lo}:{hi}] | ");
-    let (lo, hi) = mean_conf_interval(confidence, rows, |r| if r.success {Some(r.closest_particle_to_actual)} else {None})?;
+    let (lo, hi) = mean_conf_interval(confidence, rows, |r| {
+        if r.success {
+            Some(r.closest_particle_to_actual)
+        } else {
+            None
+        }
+    })?;
     print!("[{lo:.2}:{hi:.2}] | ");
-    let (lo, hi) = mean_conf_interval(confidence, rows, |r| if r.success {Some(r.best_particle_to_actual)} else {None})?;
+    let (lo, hi) = mean_conf_interval(confidence, rows, |r| {
+        if r.success {
+            Some(r.best_particle_to_actual)
+        } else {
+            None
+        }
+    })?;
     print!("[{lo:.2}:{hi:.2}] | ");
-    let (lo, hi) = mean_conf_interval(confidence, rows, |r| if r.success {Some(r.farthest_particle_to_actual)} else {None})?;
+    let (lo, hi) = mean_conf_interval(confidence, rows, |r| {
+        if r.success {
+            Some(r.farthest_particle_to_actual)
+        } else {
+            None
+        }
+    })?;
     print!("[{lo:.2}:{hi:.2}] | ");
     if let Some(odometry_to_actual) = odometry_to_actual(rows) {
         print!("{odometry_to_actual:.2} |");
@@ -58,26 +97,39 @@ fn show_conf_intervals(rows: &Vec<Row>, confidence: f64) -> anyhow::Result<()> {
 }
 
 fn odometry_to_actual(rows: &Vec<Row>) -> Option<f64> {
-    rows.iter().find(|r| r.success).map(|r| r.odometry_to_actual)
+    rows.iter()
+        .find(|r| r.success)
+        .map(|r| r.odometry_to_actual)
 }
 
-fn bimodal_conf_interval(confidence: f64, rows: &Vec<Row>) -> (usize,usize) {
+fn bimodal_conf_interval(confidence: f64, rows: &Vec<Row>) -> (usize, usize) {
     let confidence = Confidence::new_two_sided(confidence);
     let successes = rows.iter().filter(|r| r.success).count();
     match proportion::ci(confidence, rows.len(), successes) {
         Err(_) => (successes, successes),
-        Ok(interval) => ((interval.low_f() * rows.len() as f64) as usize, (interval.high_f() * rows.len() as f64) as usize)
+        Ok(interval) => (
+            (interval.low_f() * rows.len() as f64) as usize,
+            (interval.high_f() * rows.len() as f64) as usize,
+        ),
     }
 }
 
-fn median_conf_interval<N: Copy + PartialOrd, F:Fn(&Row)->Option<N>>(confidence: f64, rows: &Vec<Row>, selector: F) -> anyhow::Result<(N, N)> {
+fn median_conf_interval<N: Copy + PartialOrd, F: Fn(&Row) -> Option<N>>(
+    confidence: f64,
+    rows: &Vec<Row>,
+    selector: F,
+) -> anyhow::Result<(N, N)> {
     let values = rows.iter().filter_map(|r| selector(r)).collect::<Vec<_>>();
     let confidence = Confidence::new_two_sided(confidence);
     let interval = quantile::ci(confidence, &values, 0.5)?;
     Ok((interval.low().unwrap(), interval.high().unwrap()))
 }
 
-fn mean_conf_interval<F:Fn(&Row)->Option<f64>>(confidence: f64, rows: &Vec<Row>, selector: F) -> anyhow::Result<(f64, f64)> {
+fn mean_conf_interval<F: Fn(&Row) -> Option<f64>>(
+    confidence: f64,
+    rows: &Vec<Row>,
+    selector: F,
+) -> anyhow::Result<(f64, f64)> {
     let values = rows.iter().filter_map(|r| selector(r)).collect::<Vec<_>>();
     let confidence = Confidence::new_two_sided(confidence);
     let arith = mean::Arithmetic::from_iter(&values)?;
@@ -92,7 +144,7 @@ struct Row {
     transcript_len: usize,
     duration: f64,
     mean_iteration_time: f64,
-    max_iteration_time: f64, 
+    max_iteration_time: f64,
     closest_particle_rank: usize,
     closest_particle_to_actual: f64,
     best_particle_to_actual: f64,
@@ -106,13 +158,13 @@ impl FromStr for Row {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts = s.split(',').collect::<Vec<_>>();
         if parts.len() < 6 {
-           return Err(anyhow::anyhow!("Too few values: {parts:?}"));
+            return Err(anyhow::anyhow!("Too few values: {parts:?}"));
         }
         let mut result = Self::default();
         result.success = match parts[0] {
             "0" => false,
             "1" => true,
-            _ => return Err(anyhow::anyhow!("Bad success value: {parts:?}"))
+            _ => return Err(anyhow::anyhow!("Bad success value: {parts:?}")),
         };
         result.num_iterations = parts[1].parse::<usize>()?;
         result.transcript_len = parts[2].parse::<usize>()?;
