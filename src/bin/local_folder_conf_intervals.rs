@@ -247,9 +247,9 @@ impl FromStr for Row {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts = s.split(',').collect::<Vec<_>>();
+        let parts = s.split(',').filter(|s| s.trim().len() > 0).collect::<Vec<_>>();
         if parts.len() < 6 {
-            return Err(anyhow::anyhow!("Too few values: {parts:?}"));
+            return Err(anyhow::anyhow!("Too few values: '{parts:?}'"));
         }
         let mut result = Self::default();
         result.success = match parts[0] {
