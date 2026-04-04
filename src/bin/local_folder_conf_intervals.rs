@@ -33,8 +33,8 @@ fn get_headers_rows(pattern: Option<&String>) -> anyhow::Result<BTreeMap<String,
     for file in std::fs::read_dir(".")? {
         let file = file?;
         if let Ok(filename) = file.file_name().into_string() {
-            if filename.ends_with(".csv") && pattern.map_or(true, |p| filename.contains(p)) {
-                if let Err(e) = process_file(&filename, &mut rows) {
+            if filename.ends_with(".csv") {
+                if let Err(e) = process_file(&filename, pattern, &mut rows) {
                     println!("Error when processing file '{filename}': {e}");
                 }
             }
@@ -44,20 +44,28 @@ fn get_headers_rows(pattern: Option<&String>) -> anyhow::Result<BTreeMap<String,
     Ok(rows)
 }
 
-fn process_file(filename: &str, rows: &mut BTreeMap<String, Vec<Row>>) -> anyhow::Result<()> {
+fn process_file(
+    filename: &str,
+    pattern: Option<&String>,
+    rows: &mut BTreeMap<String, Vec<Row>>,
+) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(&filename)?;
-    let expr_src = &filename[..filename.find(".out").ok_or(anyhow::anyhow!("No clear source file for {filename}"))?];
+    let expr_src = &filename[..filename
+        .find(".out")
+        .ok_or(anyhow::anyhow!("No clear source file for {filename}"))?];
     let mut lines = contents.lines();
     let header = lines.by_ref().skip(1).next().unwrap();
     let header = format!("{expr_src},{}", pop_trailing_commas(header));
-    match rows.get_mut(&header) {
-        None => {
-            let mut value = vec![];
-            add_rows(lines, &mut value)?;
-            rows.insert(header.to_string(), value);
-        }
-        Some(value) => {
-            add_rows(lines, value)?;
+    if pattern.map_or(true, |s| header.contains(s)) {
+        match rows.get_mut(&header) {
+            None => {
+                let mut value = vec![];
+                add_rows(lines, &mut value)?;
+                rows.insert(header.to_string(), value);
+            }
+            Some(value) => {
+                add_rows(lines, value)?;
+            }
         }
     }
     Ok(())
@@ -99,7 +107,7 @@ fn print_row(descriptor: &str, rows: &Vec<Row>, confidence: f64) -> anyhow::Resu
 fn descriptors(headers: &BTreeSet<&String>) -> BTreeMap<String, String> {
     let mut field_counts: HashHistogram<String, usize> = HashHistogram::new();
     for header in headers.iter() {
-        for field in header.split(',') {
+        for field in header.split(',').filter(|s| s.trim().len() > 0) {
             field_counts.bump(&field.to_string());
         }
     }
@@ -247,7 +255,10 @@ impl FromStr for Row {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts = s.split(',').filter(|s| s.trim().len() > 0).collect::<Vec<_>>();
+        let parts = s
+            .split(',')
+            .filter(|s| s.trim().len() > 0)
+            .collect::<Vec<_>>();
         if parts.len() < 6 {
             return Err(anyhow::anyhow!("Too few values: '{parts:?}'"));
         }
