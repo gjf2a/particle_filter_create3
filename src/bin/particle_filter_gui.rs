@@ -1,9 +1,3 @@
-use bit_grid::{
-    BitGrid,
-    angle::{Degrees, Radians},
-    point::GridPoint,
-    pose::RobotPose,
-};
 use chrono::Local;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
@@ -11,6 +5,12 @@ use enum_iterator::{Sequence, all};
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
     SelectionStrategy, WeightStrategy, irobot_create3, path_plan::PathsBackTo,
+};
+use particle_filter::{
+    angle::{Degrees, Radians},
+    bit_grid::BitGrid,
+    point::GridPoint,
+    pose::RobotPose,
 };
 use particle_filter_create3::{
     cell2color,
@@ -108,9 +108,9 @@ impl PathsOut {
             Self::AllPaths => {
                 let paths_back = PathsBackTo::all(map, start);
                 let mut grid = BitGrid::default();
-                for leaf in paths_back.leaves().ones() {
+                for leaf in paths_back.leaves().iter() {
                     for square in paths_back.path_to_start(leaf) {
-                        grid.set(square, true);
+                        grid.insert(square);
                     }
                 }
                 grid
@@ -461,8 +461,8 @@ impl MainApp {
         let all_frontier = map.all_frontier_spaces();
         ui.label(format!(
             "open/all frontier/all space: {}/{}/{}",
-            frontier.count_ones(),
-            all_frontier.count_ones(),
+            frontier.len(),
+            all_frontier.len(),
             map.num_spaces()
         ));
     }
@@ -578,12 +578,12 @@ fn cell_color(
     cell: Cell,
     p: GridPoint,
 ) -> Color32 {
-    if waypoints.get(&p) && (cell == Cell::Space || cell == Cell::Unvisited) {
+    if waypoints.contains(&p) && (cell == Cell::Space || cell == Cell::Unvisited) {
         Color32::ORANGE
     } else if cell == Cell::Space {
-        if frontier.get(&p) {
+        if frontier.contains(&p) {
             Color32::CYAN
-        } else if shadow.get(&p) {
+        } else if shadow.contains(&p) {
             Color32::GRAY
         } else {
             cell2color(&cell)

@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
 
-use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use hash_histogram::HashHistogram;
 use particle_filter::{
     BitGridMap, BitGridStats, Inconsistency, ParticleFilter, ParticleFilterSettings,
 };
+use particle_filter::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use stats_ci::{Confidence, proportion};
 
 use crate::odometry_transcripts::{PoseReport, Transcript};
@@ -20,8 +20,8 @@ pub struct SuccessData {
 
 impl SuccessData {
     pub fn all_and_open_frontier_counts(&self) -> (usize, usize, f64) {
-        let all_counts = self.map.all_frontier_spaces().count_ones();
-        let open_counts = self.map.open_frontier_spaces().count_ones();
+        let all_counts = self.map.all_frontier_spaces().len();
+        let open_counts = self.map.open_frontier_spaces().len();
         (
             all_counts,
             open_counts,
@@ -217,8 +217,8 @@ impl MultiRunData {
                     outcome.best_particle_to_actual.distance(),
                     outcome.farthest_to_actual,
                     row.odometry_report.distance(),
-                    outcome.map.open_frontier_spaces().count_ones(),
-                    outcome.map.all_frontier_spaces().count_ones(),
+                    outcome.map.open_frontier_spaces().len(),
+                    outcome.map.all_frontier_spaces().len(),
                     outcome.map.num_spaces(),
                     outcome.map.num_obstacles(),
                     outcome.map.area(),

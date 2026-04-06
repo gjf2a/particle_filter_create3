@@ -3,9 +3,9 @@ pub mod odometry_transcripts;
 
 use std::{fmt::Display, str::FromStr};
 
-use bit_grid::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use eframe::egui::Color32;
 use particle_filter::{Cell, MapInput, irobot_create3::Bump};
+use particle_filter::{angle::Radians, point::FloatPoint, pose::RobotPose};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {

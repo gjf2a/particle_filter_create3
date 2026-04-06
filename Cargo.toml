@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 particle_filter = {git = "https://github.com/gjf2a/particle_filter"}
-bit_grid = {git = "https://github.com/gjf2a/bit_grid"}
 arg_vals = {git = "https://github.com/gjf2a/arg_vals"}
 anyhow = "1.0.101"
 ryu = "1.0.23"

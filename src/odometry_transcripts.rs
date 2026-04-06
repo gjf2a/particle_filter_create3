@@ -5,7 +5,7 @@ use std::{
 
 const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
 
-use bit_grid::{
+use particle_filter::{
     angle::Radians,
     point::{BoundingBox, FloatPoint},
     pose::RobotPose,
