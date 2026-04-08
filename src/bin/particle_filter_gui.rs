@@ -547,7 +547,7 @@ impl MainApp {
         let response_rect = response.rect;
         let frontier = map.open_frontier_spaces();
         let paths_out = show_paths_out.path_out_grid(map, pose);
-        for p in bounds.coord_iter() {
+        for p in bounds.row_major_coord_iter() {
             let cell = map.cell_for(&p);
             let x_rect = ((p[1] - bounds.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
             let y_rect = ((p[0] - bounds.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
