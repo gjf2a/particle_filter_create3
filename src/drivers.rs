@@ -11,11 +11,11 @@ use crate::odometry_transcripts::{PoseReport, Transcript};
 
 #[derive(Clone)]
 pub struct SuccessData {
-    pub best_particle_to_actual: PoseReport,
-    pub closest_to_actual: PoseReport,
-    pub closest_rank: usize,
+    pub best_particle_to_actual: Option<PoseReport>,
+    pub closest_to_actual: Option<PoseReport>,
+    pub closest_rank: Option<usize>,
     pub map: BitGridMap,
-    pub farthest_to_actual: f64,
+    pub farthest_to_actual: Option<f64>,
 }
 
 impl SuccessData {
@@ -38,23 +38,33 @@ fn get_success_data(
         None
     } else {
         let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
+        if let Some(actual) = &transcript.actual() {
         let (closest_estimate, map, closest_rank) =
-            closest_estimate(&transcript.actual(), &particle_filter);
-        Some(SuccessData {
-            best_particle_to_actual: transcript.pose_to_actual(best_pose),
-            closest_to_actual: transcript.pose_to_actual(closest_estimate),
-            closest_rank,
-            map,
-            farthest_to_actual: farthest_estimate(&transcript.actual(), particle_filter),
-        })
+            closest_estimate(actual, &particle_filter);
+            Some(SuccessData {
+                best_particle_to_actual: transcript.pose_to_actual(best_pose),
+                closest_to_actual: transcript.pose_to_actual(closest_estimate),
+                closest_rank: Some(closest_rank),
+                map,
+                farthest_to_actual: Some(farthest_estimate(actual, particle_filter)),
+            })
+        } else {
+            Some(SuccessData {
+                best_particle_to_actual: None,
+                closest_to_actual: None,
+                closest_rank: None,
+                map: particle_filter.particles().next().unwrap().map().clone(),
+                farthest_to_actual: None,
+            })
+        }
     }
 }
 
 #[derive(Clone)]
 pub struct OneRunData {
     pub outcome: Option<SuccessData>,
-    pub actual: FloatPoint,
-    pub odometry_report: PoseReport,
+    pub actual: Option<FloatPoint>,
+    pub odometry_report: Option<PoseReport>,
     pub final_iteration: usize,
     pub transcript_len: usize,
     pub duration: f64,
@@ -98,23 +108,33 @@ impl OneRunData {
     }
 
     pub fn print(&self) {
-        println!("Actual position: {}", self.actual);
-        for line in self.odometry_report.report("Odometry") {
-            println!("{line}");
+        if let Some(actual) = self.actual {
+            println!("Actual position: {actual}");
+        }
+        if let Some(report) = self.odometry_report.as_ref() {
+            for line in report.report("Odometry") {
+                println!("{line}");
+            }
         }
         match &self.outcome {
             None => {
                 println!("Failure");
             }
             Some(data) => {
-                for line in data.best_particle_to_actual.report("Best-particle") {
-                    println!("{line}");
+                if let Some(best) = data.best_particle_to_actual.as_ref() {
+                    for line in best.report("Best-particle") {
+                        println!("{line}");
+                    }
                 }
-                for line in data.closest_to_actual.report("Closest-particle") {
-                    println!("{line}");
+                if let Some(closest) = data.closest_to_actual.as_ref() {
+                    for line in closest.report("Closest-particle") {
+                        println!("{line}");
+                    }
                 }
                 println!("Dimensions: {} x {}", data.map.width(), data.map.height());
-                println!("Farthest particle distance: {}", data.farthest_to_actual);
+                if let Some(farthest) = data.farthest_to_actual {
+                    println!("Farthest particle distance: {farthest}");
+                }
             }
         }
         println!(
@@ -212,11 +232,11 @@ impl MultiRunData {
                     row.duration,
                     row.mean_iteration_time,
                     row.max_iteration_time,
-                    outcome.closest_rank,
-                    outcome.closest_to_actual.distance(),
-                    outcome.best_particle_to_actual.distance(),
-                    outcome.farthest_to_actual,
-                    row.odometry_report.distance(),
+                    outcome.closest_rank.map_or(String::new(), |r| format!("{r}")),
+                    outcome.closest_to_actual.as_ref().map_or(String::new(), |c| format!("{}", c.distance())),//outcome.closest_to_actual.distance(),
+                    outcome.best_particle_to_actual.as_ref().map_or(String::new(), |b| format!("{}", b.distance())),//outcome.best_particle_to_actual.distance(),
+                    outcome.farthest_to_actual.map_or(String::new(), |f| format!("{f}")),
+                    row.odometry_report.as_ref().map_or(String::new(), |odom| format!("{}", odom.distance())),//row.odometry_report.distance(),
                     outcome.map.open_frontier_spaces().len(),
                     outcome.map.all_frontier_spaces().len(),
                     outcome.map.num_spaces(),

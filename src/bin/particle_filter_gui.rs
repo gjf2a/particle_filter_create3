@@ -32,8 +32,15 @@ pub fn main() {
         println!("Usage: particle_filter_gui fileneme");
         return;
     }
+
     let transcript_filename = args[1].as_str();
-    let transcript = Transcript::from_transcript(transcript_filename).unwrap();
+    let transcript = match transcript_from(transcript_filename) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Error {e} when trying to read transcript from {transcript_filename}");
+            return;
+        } 
+    };
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -56,6 +63,17 @@ pub fn main() {
         }),
     )
     .unwrap();
+}
+
+fn transcript_from(transcript_filename: &str) -> anyhow::Result<Transcript> {
+    if transcript_filename.ends_with(".json") {
+        let content = std::fs::read_to_string(transcript_filename)?;
+        let particle_filter = serde_json::from_str::<ParticleFilter>(&content)?;
+        let map_inputs = particle_filter.inputs().ok_or(anyhow::anyhow!("No inputs saved in particle filter"))?;
+        Ok(Transcript::from_map_inputs(&map_inputs))
+    } else {
+        Transcript::from_transcript(transcript_filename)
+    }
 }
 
 #[derive(Clone)]
@@ -401,7 +419,9 @@ impl MainApp {
         let msg = match &data.outcome {
             None => format!("Failed"),
             Some(estimate) => {
-                Self::render_map_selector(ui, status, num_particles, estimate.closest_rank);
+                if let Some(closest_rank) = estimate.closest_rank {
+                    Self::render_map_selector(ui, status, num_particles, closest_rank);
+                }
                 format!("Success")
             }
         };
@@ -519,10 +539,13 @@ impl MainApp {
     fn render_results(ui: &mut Ui, results: &OneRunData) {
         ui.vertical(|ui| {
             render_outcome(ui, &results.outcome);
-
-            ui.label(format!("Actual position: {}", results.actual));
-            for line in results.odometry_report.report("Odometry") {
-                ui.label(line);
+            if let Some(actual) = results.actual {
+                ui.label(format!("Actual position: {actual}"));
+            }
+            if let Some(report) = results.odometry_report.as_ref() {
+                for line in report.report("Odometry") {
+                    ui.label(line);
+                }
             }
 
             render_inconsistencies(ui, results);
@@ -599,17 +622,23 @@ fn render_outcome(ui: &mut Ui, outcome: &Option<SuccessData>) {
             ui.label(format!("Failure"));
         }
         Some(data) => {
-            for line in data.best_particle_to_actual.report("Best-particle") {
-                ui.label(line);
+            if let Some(best) = data.best_particle_to_actual.as_ref() {
+                for line in best.report("Best-particle") {
+                    ui.label(line);
+                }
             }
-            ui.label(format!("Closest-particle rank: {}", data.closest_rank));
-            for line in data.closest_to_actual.report("Closest-particle") {
-                ui.label(line);
+            if let Some(closest_rank) = data.closest_rank {
+                ui.label(format!("Closest-particle rank: {closest_rank}"));
             }
-            ui.label(format!(
-                "Farthest particle distance: {:.2}m",
-                data.farthest_to_actual
-            ));
+            
+            if let Some(closest_actual) = data.closest_to_actual.as_ref() {
+                for line in closest_actual.report("Closest-particle") {
+                    ui.label(line);
+                }
+            }
+            if let Some(farthest) = data.farthest_to_actual {
+                ui.label(format!("Farthest particle distance: {farthest:.2}m"));
+            }
             let (all_frontier, open_frontier, ratio) = data.all_and_open_frontier_counts();
             ui.label(format!(
                 "Frontier counts: {open_frontier}/{all_frontier} ({:.2}%)",
@@ -655,11 +684,11 @@ impl ParticleFilterRunner {
         let mut particle_filter = ParticleFilter::new(self.settings);
         let transcript = self.transcript.clone();
         let mut num_completed = 0;
-        for (i, sensor_info) in transcript.iter().enumerate() {
+        for (i, map_input) in transcript.iter().enumerate() {
             let particle = particle_filter.particles().next().unwrap();
             let elapsed = Instant::now().duration_since(start);
             self.send_progress(i, elapsed, particle);
-            particle_filter.iterate(sensor_info.map_input());
+            particle_filter.iterate(map_input);
             num_completed = i + 1;
             if let Some(failure) = particle_filter.example_failure() {
                 self.send_progress(i, elapsed, &failure);

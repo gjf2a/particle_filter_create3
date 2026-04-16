@@ -1,14 +1,12 @@
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader}, path::Path,
 };
 
 const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
 
 use particle_filter::{
-    angle::Radians,
-    point::{BoundingBox, FloatPoint},
-    pose::RobotPose,
+    MapInput, angle::Radians, point::{BoundingBox, FloatPoint}, pose::RobotPose
 };
 
 use crate::SensorInfo;
@@ -39,8 +37,8 @@ impl PoseReport {
 
 #[derive(Clone)]
 pub struct Transcript {
-    steps: Vec<SensorInfo>,
-    actual_ending_point: FloatPoint,
+    steps: Vec<MapInput>,
+    actual_ending_point: Option<FloatPoint>,
 }
 
 impl Transcript {
@@ -52,17 +50,29 @@ impl Transcript {
             .rfind('.')
             .ok_or(anyhow::anyhow!("wrong format"))?;
         let actual_filename = format!("actual{}", &transcript_filename[start..end]);
+        let actual_ending_point = if Path::exists(&Path::new(&actual_filename)) {
+            Some(parse_ending_point(actual_filename.as_str())?)
+        } else {
+            None
+        };
         Ok(Self {
             steps: from_transcript(transcript_filename)?,
-            actual_ending_point: parse_ending_point(actual_filename.as_str())?,
+            actual_ending_point,
         })
     }
 
-    pub fn actual(&self) -> FloatPoint {
+    pub fn from_map_inputs(map_inputs: &Vec<MapInput>) -> Self {
+        Self {
+            steps: map_inputs.clone(),
+            actual_ending_point: None,
+        }
+    }
+
+    pub fn actual(&self) -> Option<FloatPoint> {
         self.actual_ending_point
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = SensorInfo> {
+    pub fn iter(&self) -> impl Iterator<Item = MapInput> {
         self.steps.iter().copied()
     }
 
@@ -70,20 +80,20 @@ impl Transcript {
         self.steps.len()
     }
 
-    pub fn error_to(&self, target: FloatPoint) -> FloatPoint {
-        self.actual_ending_point - target
+    pub fn error_to(&self, target: FloatPoint) -> Option<FloatPoint> {
+        self.actual_ending_point.map(|end| end - target)
     }
 
     pub fn final_pose(&self) -> RobotPose<Radians> {
         self.steps
             .iter()
             .rev()
-            .find(|s| s.odometry().is_some())
-            .map(|s| s.odometry().unwrap())
+            .find(|s| s.pose().is_some())
+            .map(|s| s.pose().unwrap())
             .unwrap()
     }
 
-    pub fn error_robot_stop(&self) -> FloatPoint {
+    pub fn error_robot_stop(&self) -> Option<FloatPoint> {
         self.error_to(self.final_pose().pos)
     }
 
@@ -91,7 +101,7 @@ impl Transcript {
         let mut prev = FloatPoint::default();
         let mut total = 0.0;
         for info in self.steps.iter() {
-            if let SensorInfo::Pose(robot_pose) = info {
+            if let Some(robot_pose) = info.pose() {
                 total += robot_pose.pos.euclidean_distance(prev);
                 prev = robot_pose.pos;
             }
@@ -100,30 +110,35 @@ impl Transcript {
     }
 
     pub fn total_time_seconds(&self) -> f64 {
-        self.steps.iter().filter(|s| s.odometry().is_some()).count() as f64
+        self.steps.iter().filter(|s| s.pose().is_some()).count() as f64
             * CREATE3_ODOMETRY_UPDATE_INTERVAL
     }
 
     pub fn bounding_box(&self) -> Option<BoundingBox<f64>> {
         self.steps
             .iter()
-            .filter_map(|s| s.odometry())
+            .filter_map(|s| s.pose())
             .map(|p| p.pos)
             .collect()
     }
 
-    pub fn pose_to_actual(&self, pose: RobotPose<Radians>) -> PoseReport {
-        PoseReport {
-            pose,
-            error: self.error_to(pose.pos),
-            distance: self.actual().euclidean_distance(pose.pos),
+    pub fn pose_to_actual(&self, pose: RobotPose<Radians>) -> Option<PoseReport> {
+        if let Some(error) = self.error_to(pose.pos) {
+            if let Some(actual) = self.actual() {
+                return Some(PoseReport {
+                    pose,
+                    error,
+                    distance: actual.euclidean_distance(pose.pos),
+                });
+            }
         }
+        None
     }
 }
 
-fn from_transcript(transcript_filename: &str) -> anyhow::Result<Vec<SensorInfo>> {
+fn from_transcript(transcript_filename: &str) -> anyhow::Result<Vec<MapInput>> {
     let file = BufReader::new(File::open(transcript_filename)?);
-    file.lines().map(|line| Ok(line?.parse()?)).collect()
+    file.lines().map(|line| Ok(line?.parse::<SensorInfo>()?.map_input())).collect()
 }
 
 pub fn parse_ending_point(actual_filename: &str) -> anyhow::Result<FloatPoint> {
@@ -174,9 +189,8 @@ mod tests {
         for (i, line) in file.lines().enumerate() {
             let line = line.unwrap();
             let line_info = line.parse::<SensorInfo>().unwrap();
-            assert_eq!(line_info, transcript[i]);
-            let transcript_line = format!("{}", transcript[i]);
-            assert_eq!(transcript_line, line);
+            let map_input = line_info.map_input();
+            assert_eq!(map_input, transcript[i]);
         }
     }
 }
