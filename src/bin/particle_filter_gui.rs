@@ -34,7 +34,7 @@ pub fn main() {
     }
 
     let transcript_filename = args[1].as_str();
-    let transcript = match transcript_from(transcript_filename) {
+    let (transcript, particle_filter) = match transcript_from(transcript_filename) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("Error {e} when trying to read transcript from {transcript_filename}");
@@ -57,7 +57,7 @@ pub fn main() {
         "Particle Filters",
         native_options,
         Box::new(|cc| {
-            let mut app = MainApp::new(transcript_filename, transcript);
+            let mut app = MainApp::new(transcript_filename, transcript, particle_filter);
             app.setup(&cc.egui_ctx);
             Ok(Box::new(app))
         }),
@@ -65,14 +65,14 @@ pub fn main() {
     .unwrap();
 }
 
-fn transcript_from(transcript_filename: &str) -> anyhow::Result<Transcript> {
+fn transcript_from(transcript_filename: &str) -> anyhow::Result<(Transcript, Option<ParticleFilter>)> {
     if transcript_filename.ends_with(".json") {
         let content = std::fs::read_to_string(transcript_filename)?;
         let particle_filter = serde_json::from_str::<ParticleFilter>(&content)?;
         let map_inputs = particle_filter.inputs().ok_or(anyhow::anyhow!("No inputs saved in particle filter"))?;
-        Ok(Transcript::from_map_inputs(&map_inputs))
+        Ok((Transcript::from_map_inputs(&map_inputs), Some(particle_filter)))
     } else {
-        Transcript::from_transcript(transcript_filename)
+        Transcript::from_transcript(transcript_filename).map(|t| (t, None))
     }
 }
 
@@ -103,6 +103,18 @@ struct CurrentData {
     results: Option<OneRunData>,
     current_particle: usize,
     pose: RobotPose<Radians>,
+}
+
+impl CurrentData {
+    fn new(particle: &Particle, message: &str, results: Option<OneRunData>) -> Self {
+        Self {
+            message: message.to_string(),
+            map: particle.map().clone(),
+            pose: particle.estimated_pose(),
+            current_particle: 0,
+            results
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Sequence, Debug)]
@@ -164,7 +176,12 @@ impl eframe::App for MainApp {
 }
 
 impl MainApp {
-    fn new(filename: &str, transcript: Transcript) -> Self {
+    fn new(filename: &str, transcript: Transcript, particle_filter: Option<ParticleFilter>) -> Self {
+        let status = Arc::new(Mutex::new(particle_filter.map(|pf| {
+            let particle = pf.particles().next().unwrap();
+            let results = Some(OneRunData::new(&transcript, &pf, None, None, None, transcript.len()));
+            CurrentData::new(particle, "Run-time Particle Filter", results)
+        })));
         Self {
             filename: filename.to_string(),
             transcript,
@@ -177,7 +194,7 @@ impl MainApp {
             obst_noise_xy: "0.032".to_string(),
             obst_noise_theta: "0.62".to_string(),
             num_exprs: "500".to_string(),
-            status: Arc::new(Mutex::new(None)),
+            status,
             expr_data: Arc::new(Mutex::new(None)),
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
@@ -706,14 +723,12 @@ impl ParticleFilterRunner {
     }
 
     fn completion_status(&self, final_iteration: usize, particle_filter: &ParticleFilter) {
-        let stats = particle_filter.stats();
         let packed_results = OneRunData::new(
             &self.transcript,
             &particle_filter,
-            &stats,
-            self.duration,
-            self.mean_iteration_time,
-            self.max_iteration_time,
+            Some(self.duration),
+            Some(self.mean_iteration_time),
+            Some(self.max_iteration_time),
             final_iteration,
         );
         let mut status = self.status.lock().unwrap();
@@ -739,13 +754,7 @@ impl ParticleFilterRunner {
         match self.status.lock() {
             Ok(mut status) => {
                 let results = status.as_ref().and_then(|s| s.results.clone());
-                *status = Some(CurrentData {
-                    message,
-                    map: particle.map().clone(),
-                    pose: particle.estimated_pose(),
-                    results,
-                    current_particle: 0,
-                });
+                *status = Some(CurrentData::new(particle, &message, results));
             }
             Err(e) => println!("Thread error: {e}"),
         }

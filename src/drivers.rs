@@ -1,8 +1,9 @@
 use std::cmp::Ordering;
+use std::fmt::Display;
 
 use hash_histogram::HashHistogram;
 use particle_filter::{
-    BitGridMap, BitGridStats, Inconsistency, ParticleFilter, ParticleFilterSettings,
+    BitGridMap, Inconsistency, ParticleFilter, ParticleFilterSettings,
 };
 use particle_filter::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use stats_ci::{Confidence, proportion};
@@ -67,9 +68,9 @@ pub struct OneRunData {
     pub odometry_report: Option<PoseReport>,
     pub final_iteration: usize,
     pub transcript_len: usize,
-    pub duration: f64,
-    pub mean_iteration_time: f64,
-    pub max_iteration_time: f64,
+    pub duration: Option<f64>,
+    pub mean_iteration_time: Option<f64>,
+    pub max_iteration_time: Option<f64>,
     pub iterations_with_inconsistencies: usize,
     pub total_inconsistencies: usize,
     pub obstacle_space_issues: usize,
@@ -82,12 +83,12 @@ impl OneRunData {
     pub fn new(
         transcript: &Transcript,
         particle_filter: &ParticleFilter,
-        stats: &BitGridStats,
-        duration: f64,
-        mean_iteration_time: f64,
-        max_iteration_time: f64,
+        duration: Option<f64>,
+        mean_iteration_time: Option<f64>,
+        max_iteration_time: Option<f64>,
         final_iteration: usize,
     ) -> Self {
+        let stats = particle_filter.stats();
         let iteration_inconsistencies = stats.by_iteration();
         Self {
             outcome: get_success_data(transcript, particle_filter),
@@ -182,6 +183,14 @@ pub struct MultiRunData {
     pub settings: ParticleFilterSettings,
 }
 
+fn opt_report(report: Option<&PoseReport>) -> String {
+    report.map_or(String::new(), |v| format!("{}", v.distance()))
+}
+
+fn opt_value<N:Copy + Display>(value: Option<N>) -> String {
+    value.map_or(String::new(), |v| format!("{v}"))
+}
+
 impl MultiRunData {
     pub fn num_runs(&self) -> usize {
         self.data.len()
@@ -221,22 +230,22 @@ impl MultiRunData {
                     "0,{},{},{},{},{}\n",
                     row.final_iteration,
                     row.transcript_len,
-                    row.duration,
-                    row.mean_iteration_time,
-                    row.max_iteration_time
+                    opt_value(row.duration),
+                    opt_value(row.mean_iteration_time),
+                    opt_value(row.max_iteration_time)
                 ),
                 Some(outcome) => format!(
                     "1,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
                     row.final_iteration,
                     row.transcript_len,
-                    row.duration,
-                    row.mean_iteration_time,
-                    row.max_iteration_time,
+                    opt_value(row.duration),
+                    opt_value(row.mean_iteration_time),
+                    opt_value(row.max_iteration_time),
                     outcome.closest_rank.map_or(String::new(), |r| format!("{r}")),
-                    outcome.closest_to_actual.as_ref().map_or(String::new(), |c| format!("{}", c.distance())),//outcome.closest_to_actual.distance(),
-                    outcome.best_particle_to_actual.as_ref().map_or(String::new(), |b| format!("{}", b.distance())),//outcome.best_particle_to_actual.distance(),
+                    opt_report(outcome.closest_to_actual.as_ref()),
+                    opt_report(outcome.best_particle_to_actual.as_ref()),
                     outcome.farthest_to_actual.map_or(String::new(), |f| format!("{f}")),
-                    row.odometry_report.as_ref().map_or(String::new(), |odom| format!("{}", odom.distance())),//row.odometry_report.distance(),
+                    opt_report(row.odometry_report.as_ref()),
                     outcome.map.open_frontier_spaces().len(),
                     outcome.map.all_frontier_spaces().len(),
                     outcome.map.num_spaces(),
