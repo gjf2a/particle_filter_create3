@@ -2,6 +2,7 @@ use chrono::Local;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 use enum_iterator::{Sequence, all};
+use particle_filter::MapInput;
 use particle_filter::{
     BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
     SelectionStrategy, WeightStrategy, irobot_create3, path_plan::PathsBackTo,
@@ -71,6 +72,10 @@ fn transcript_from(transcript_filename: &str) -> anyhow::Result<(Transcript, Opt
         let particle_filter = serde_json::from_str::<ParticleFilter>(&content)?;
         let map_inputs = particle_filter.inputs().ok_or(anyhow::anyhow!("No inputs saved in particle filter"))?;
         Ok((Transcript::from_map_inputs(&map_inputs), Some(particle_filter)))
+    } else if transcript_filename.ends_with(".mi") {
+        let content = std::fs::read_to_string(transcript_filename)?;
+        let map_inputs = content.lines().map(|line| line.parse::<MapInput>()).collect::<anyhow::Result<Vec<MapInput>>>()?;
+        Ok((Transcript::from_map_inputs(&map_inputs), None))
     } else {
         Transcript::from_transcript(transcript_filename).map(|t| (t, None))
     }

@@ -68,6 +68,10 @@ impl Transcript {
         }
     }
 
+    pub fn map_inputs(&self) -> &Vec<MapInput> {
+        &self.steps
+    }
+
     pub fn actual(&self) -> Option<FloatPoint> {
         self.actual_ending_point
     }
