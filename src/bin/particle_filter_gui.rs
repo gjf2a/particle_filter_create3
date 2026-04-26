@@ -99,6 +99,7 @@ struct MainApp {
     expr_data: Arc<Mutex<Option<MultiRunData>>>,
     current_expr: Arc<AtomicCell<Option<usize>>>,
     show_waypoints: PathsOut,
+    can_fail: bool,
 }
 
 #[derive(Clone)]
@@ -204,6 +205,7 @@ impl MainApp {
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
             show_waypoints: PathsOut::None,
+            can_fail: true,
         }
     }
 
@@ -220,6 +222,7 @@ impl MainApp {
             selection_strategy: self.selection_strategy,
             weight_strategy: self.weight_strategy,
             save_inputs: false,
+            can_fail: self.can_fail,
         })
     }
 
@@ -307,6 +310,7 @@ impl MainApp {
             ui.label("Number of Runs");
             Self::limited_text_edit(ui, &mut self.num_exprs);
         });
+        ui.checkbox(&mut self.can_fail, "Can Fail?");
         if ui.button("Experiments").clicked() {
             if let Err(e) = self.run_experiments() {
                 ui.label(format!("Experiments error: {e}"));
@@ -710,7 +714,7 @@ impl ParticleFilterRunner {
             let particle = particle_filter.particles().next().unwrap();
             let elapsed = Instant::now().duration_since(start);
             self.send_progress(i, elapsed, particle);
-            particle_filter.iterate(map_input);
+            particle_filter.iterate(map_input, self.settings.can_fail);
             num_completed = i + 1;
             if let Some(failure) = particle_filter.example_failure() {
                 self.send_progress(i, elapsed, &failure);
