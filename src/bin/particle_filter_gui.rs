@@ -99,7 +99,6 @@ struct MainApp {
     expr_data: Arc<Mutex<Option<MultiRunData>>>,
     current_expr: Arc<AtomicCell<Option<usize>>>,
     show_waypoints: PathsOut,
-    can_fail: bool,
 }
 
 #[derive(Clone)]
@@ -205,7 +204,6 @@ impl MainApp {
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
             show_waypoints: PathsOut::None,
-            can_fail: true,
         }
     }
 
@@ -222,7 +220,7 @@ impl MainApp {
             selection_strategy: self.selection_strategy,
             weight_strategy: self.weight_strategy,
             save_inputs: false,
-            can_fail: self.can_fail,
+            can_fail: true,
         })
     }
 
@@ -310,7 +308,6 @@ impl MainApp {
             ui.label("Number of Runs");
             Self::limited_text_edit(ui, &mut self.num_exprs);
         });
-        ui.checkbox(&mut self.can_fail, "Can Fail?");
         if ui.button("Experiments").clicked() {
             if let Err(e) = self.run_experiments() {
                 ui.label(format!("Experiments error: {e}"));
@@ -535,7 +532,7 @@ impl MainApp {
         Ok(())
     }
 
-    fn noises_from_ui(&self) -> anyhow::Result<Noises> {
+    fn noises_from_ui(&self) -> anyhow::Result<Noises<Degrees>> {
         Ok(Noises {
             clear: Noise {
                 stdev_x_y: self.clear_noise_xy.parse::<f64>()?,
