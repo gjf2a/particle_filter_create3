@@ -2,9 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 
 use hash_histogram::HashHistogram;
-use particle_filter::{
-    BitGridMap, Inconsistency, ParticleFilter, ParticleFilterSettings,
-};
+use particle_filter::{BitGridMap, Inconsistency, ParticleFilter, ParticleFilterSettings};
 use particle_filter::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use stats_ci::{Confidence, proportion};
 
@@ -40,8 +38,7 @@ fn get_success_data(
     } else {
         let best_pose = particle_filter.particles().next().unwrap().estimated_pose();
         if let Some(actual) = &transcript.actual() {
-        let (closest_estimate, map, closest_rank) =
-            closest_estimate(actual, &particle_filter);
+            let (closest_estimate, map, closest_rank) = closest_estimate(actual, &particle_filter);
             Some(SuccessData {
                 best_particle_to_actual: transcript.pose_to_actual(best_pose),
                 closest_to_actual: transcript.pose_to_actual(closest_estimate),
@@ -187,7 +184,7 @@ fn opt_report(report: Option<&PoseReport>) -> String {
     report.map_or(String::new(), |v| format!("{}", v.distance()))
 }
 
-fn opt_value<N:Copy + Display>(value: Option<N>) -> String {
+fn opt_value<N: Copy + Display>(value: Option<N>) -> String {
     value.map_or(String::new(), |v| format!("{v}"))
 }
 
@@ -221,7 +218,7 @@ impl MultiRunData {
             self.settings.noises.clear.stdev_x_y,
             self.settings.noises.clear.stdev_angle,
             self.settings.noises.obst.stdev_x_y,
-            self.settings.noises.obst.stdev_angle
+            self.settings.noises.obst.stdev_angle,
         ));
         csv.push_str("succeeds,num_iterations,transcript_length,duration,mean_iteration_time,max_iteration_time,closest_particle_rank,closest_particle_to_actual,best_particle_to_actual,farthest_particle_to_actual,odometry_to_actual,open_frontier,all_frontier,all_space,num_obstacles,map_area\n");
         for row in self.data.iter() {
@@ -241,10 +238,14 @@ impl MultiRunData {
                     opt_value(row.duration),
                     opt_value(row.mean_iteration_time),
                     opt_value(row.max_iteration_time),
-                    outcome.closest_rank.map_or(String::new(), |r| format!("{r}")),
+                    outcome
+                        .closest_rank
+                        .map_or(String::new(), |r| format!("{r}")),
                     opt_report(outcome.closest_to_actual.as_ref()),
                     opt_report(outcome.best_particle_to_actual.as_ref()),
-                    outcome.farthest_to_actual.map_or(String::new(), |f| format!("{f}")),
+                    outcome
+                        .farthest_to_actual
+                        .map_or(String::new(), |f| format!("{f}")),
                     opt_report(row.odometry_report.as_ref()),
                     outcome.map.open_frontier_spaces().len(),
                     outcome.map.all_frontier_spaces().len(),

@@ -1,12 +1,16 @@
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader}, path::Path,
+    io::{BufRead, BufReader},
+    path::Path,
 };
 
 const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
 
 use particle_filter::{
-    MapInput, angle::Radians, point::{BoundingBox, FloatPoint}, pose::RobotPose
+    MapInput,
+    angle::Radians,
+    point::{BoundingBox, FloatPoint},
+    pose::RobotPose,
 };
 
 use crate::SensorInfo;
@@ -142,7 +146,9 @@ impl Transcript {
 
 fn from_transcript(transcript_filename: &str) -> anyhow::Result<Vec<MapInput>> {
     let file = BufReader::new(File::open(transcript_filename)?);
-    file.lines().map(|line| Ok(line?.parse::<SensorInfo>()?.map_input())).collect()
+    file.lines()
+        .map(|line| Ok(line?.parse::<SensorInfo>()?.map_input()))
+        .collect()
 }
 
 pub fn parse_ending_point(actual_filename: &str) -> anyhow::Result<FloatPoint> {

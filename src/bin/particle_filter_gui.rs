@@ -2,11 +2,11 @@ use chrono::Local;
 use crossbeam_utils::atomic::AtomicCell;
 use eframe::egui::{self, Color32, Context, CornerRadius, Painter, Pos2, Rect, Ui, Vec2, Visuals};
 use enum_iterator::{Sequence, all};
-use particle_filter::MapInput;
 use particle_filter::{
-    BitGridMap, Cell, Noise, Noises, Particle, ParticleFilter, ParticleFilterSettings,
-    SelectionStrategy, WeightStrategy, irobot_create3, path_plan::PathsBackTo,
+    BitGridMap, Cell, Noises, Particle, ParticleFilter, ParticleFilterSettings, SelectionStrategy,
+    WeightStrategy, irobot_create3, path_plan::PathsBackTo,
 };
+use particle_filter::{MapInput, PoseNoise};
 use particle_filter::{
     angle::{Degrees, Radians},
     bit_grid::BitGrid,
@@ -40,7 +40,7 @@ pub fn main() {
         Err(e) => {
             eprintln!("Error {e} when trying to read transcript from {transcript_filename}");
             return;
-        } 
+        }
     };
 
     let native_options = eframe::NativeOptions {
@@ -66,15 +66,25 @@ pub fn main() {
     .unwrap();
 }
 
-fn transcript_from(transcript_filename: &str) -> anyhow::Result<(Transcript, Option<ParticleFilter>)> {
+fn transcript_from(
+    transcript_filename: &str,
+) -> anyhow::Result<(Transcript, Option<ParticleFilter>)> {
     if transcript_filename.ends_with(".json") {
         let content = std::fs::read_to_string(transcript_filename)?;
         let particle_filter = serde_json::from_str::<ParticleFilter>(&content)?;
-        let map_inputs = particle_filter.inputs().ok_or(anyhow::anyhow!("No inputs saved in particle filter"))?;
-        Ok((Transcript::from_map_inputs(&map_inputs), Some(particle_filter)))
+        let map_inputs = particle_filter
+            .inputs()
+            .ok_or(anyhow::anyhow!("No inputs saved in particle filter"))?;
+        Ok((
+            Transcript::from_map_inputs(&map_inputs),
+            Some(particle_filter),
+        ))
     } else if transcript_filename.ends_with(".mi") {
         let content = std::fs::read_to_string(transcript_filename)?;
-        let map_inputs = content.lines().map(|line| line.parse::<MapInput>()).collect::<anyhow::Result<Vec<MapInput>>>()?;
+        let map_inputs = content
+            .lines()
+            .map(|line| line.parse::<MapInput>())
+            .collect::<anyhow::Result<Vec<MapInput>>>()?;
         Ok((Transcript::from_map_inputs(&map_inputs), None))
     } else {
         Transcript::from_transcript(transcript_filename).map(|t| (t, None))
@@ -99,6 +109,7 @@ struct MainApp {
     expr_data: Arc<Mutex<Option<MultiRunData>>>,
     current_expr: Arc<AtomicCell<Option<usize>>>,
     show_waypoints: PathsOut,
+    obstacle_noise: bool,
 }
 
 #[derive(Clone)]
@@ -117,7 +128,7 @@ impl CurrentData {
             map: particle.map().clone(),
             pose: particle.estimated_pose(),
             current_particle: 0,
-            results
+            results,
         }
     }
 }
@@ -181,10 +192,21 @@ impl eframe::App for MainApp {
 }
 
 impl MainApp {
-    fn new(filename: &str, transcript: Transcript, particle_filter: Option<ParticleFilter>) -> Self {
+    fn new(
+        filename: &str,
+        transcript: Transcript,
+        particle_filter: Option<ParticleFilter>,
+    ) -> Self {
         let status = Arc::new(Mutex::new(particle_filter.map(|pf| {
             let particle = pf.particles().next().unwrap();
-            let results = Some(OneRunData::new(&transcript, &pf, None, None, None, transcript.len()));
+            let results = Some(OneRunData::new(
+                &transcript,
+                &pf,
+                None,
+                None,
+                None,
+                transcript.len(),
+            ));
             CurrentData::new(particle, "Run-time Particle Filter", results)
         })));
         Self {
@@ -204,6 +226,7 @@ impl MainApp {
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
             show_waypoints: PathsOut::None,
+            obstacle_noise: true,
         }
     }
 
@@ -220,7 +243,6 @@ impl MainApp {
             selection_strategy: self.selection_strategy,
             weight_strategy: self.weight_strategy,
             save_inputs: false,
-            can_fail: true,
         })
     }
 
@@ -235,6 +257,7 @@ impl MainApp {
 
     fn render_settings(&mut self, ui: &mut Ui) {
         ui.vertical(|ui| {
+            ui.checkbox(&mut self.obstacle_noise, "Use Obstacle Noise");
             Self::noise_entry(
                 ui,
                 "Collision Noise",
@@ -511,8 +534,9 @@ impl MainApp {
     }
 
     fn make_runner(&self) -> anyhow::Result<ParticleFilterRunner> {
+        let transcript = self.transcript.clone();
         Ok(ParticleFilterRunner {
-            transcript: self.transcript.clone(),
+            transcript,
             settings: self.settings()?,
             status: self.status.clone(),
             duration: 0.0,
@@ -532,13 +556,13 @@ impl MainApp {
         Ok(())
     }
 
-    fn noises_from_ui(&self) -> anyhow::Result<Noises<Degrees>> {
+    fn noises_from_ui(&self) -> anyhow::Result<Noises> {
         Ok(Noises {
-            clear: Noise {
+            clear: PoseNoise {
                 stdev_x_y: self.clear_noise_xy.parse::<f64>()?,
                 stdev_angle: Degrees::new(self.clear_noise_theta.parse::<f64>()?),
             },
-            obst: Noise {
+            obst: PoseNoise {
                 stdev_x_y: self.obst_noise_xy.parse::<f64>()?,
                 stdev_angle: Degrees::new(self.obst_noise_theta.parse::<f64>()?),
             },
@@ -653,7 +677,7 @@ fn render_outcome(ui: &mut Ui, outcome: &Option<SuccessData>) {
             if let Some(closest_rank) = data.closest_rank {
                 ui.label(format!("Closest-particle rank: {closest_rank}"));
             }
-            
+
             if let Some(closest_actual) = data.closest_to_actual.as_ref() {
                 for line in closest_actual.report("Closest-particle") {
                     ui.label(line);
@@ -711,7 +735,7 @@ impl ParticleFilterRunner {
             let particle = particle_filter.particles().next().unwrap();
             let elapsed = Instant::now().duration_since(start);
             self.send_progress(i, elapsed, particle);
-            particle_filter.iterate(map_input, self.settings.can_fail);
+            particle_filter.iterate(map_input);
             num_completed = i + 1;
             if let Some(failure) = particle_filter.example_failure() {
                 self.send_progress(i, elapsed, &failure);

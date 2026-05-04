@@ -5,9 +5,13 @@ fn main() -> anyhow::Result<()> {
         if let Some(suffix) = arg.rfind('.') {
             let transcript = Transcript::from_transcript(&arg)?;
             let map_filename = format!("{}.mi", &arg[..suffix]);
-            let map_strs = transcript.map_inputs().iter().map(|mi| format!("{mi}")).collect::<Vec<_>>();
-            std::fs::write(map_filename, map_strs.join("\n"))?;    
-        }     
+            let map_strs = transcript
+                .map_inputs()
+                .iter()
+                .map(|mi| format!("{mi}"))
+                .collect::<Vec<_>>();
+            std::fs::write(map_filename, map_strs.join("\n"))?;
+        }
     }
     Ok(())
 }

@@ -31,10 +31,7 @@ impl SensorInfo {
     pub fn map_input(&self) -> MapInput {
         match self {
             Self::Pose(pose) => MapInput::Pose(*pose),
-            Self::Bump(bump) => {
-                let (distance, heading) = bump.obstacle_at();
-                MapInput::Collision(distance, heading)
-            }
+            Self::Bump(bump) => bump.obstacle_at(),
         }
     }
 }
