@@ -109,7 +109,6 @@ struct MainApp {
     expr_data: Arc<Mutex<Option<MultiRunData>>>,
     current_expr: Arc<AtomicCell<Option<usize>>>,
     show_waypoints: PathsOut,
-    obstacle_noise: bool,
 }
 
 #[derive(Clone)]
@@ -226,7 +225,6 @@ impl MainApp {
             thread_running: Arc::new(AtomicCell::new(false)),
             current_expr: Arc::new(AtomicCell::new(None)),
             show_waypoints: PathsOut::None,
-            obstacle_noise: true,
         }
     }
 
@@ -257,7 +255,6 @@ impl MainApp {
 
     fn render_settings(&mut self, ui: &mut Ui) {
         ui.vertical(|ui| {
-            ui.checkbox(&mut self.obstacle_noise, "Use Obstacle Noise");
             Self::noise_entry(
                 ui,
                 "Collision Noise",
@@ -624,6 +621,15 @@ impl MainApp {
             let color = cell_color(&paths_out, &frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
+        
+        // For test cases...
+        /*
+        println!("Rendering map...");
+        println!("{}", serde_json::to_string(&map).unwrap());
+        println!("Pose");
+        println!("{}", serde_json::to_string(&pose).unwrap());
+        println!();
+        */
     }
 }
 
