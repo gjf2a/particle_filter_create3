@@ -143,23 +143,8 @@ impl PathsOut {
     fn path_out_grid(&self, map: &BitGridMap, start: RobotPose<Radians>) -> BitGrid {
         match self {
             Self::None => BitGrid::default(),
-            Self::ShortestPath => {
-                let paths_back = PathsBackTo::any(map, start);
-                match paths_back.shortest_path() {
-                    None => BitGrid::default(),
-                    Some(shortest) => shortest.iter().collect(),
-                }
-            }
-            Self::AllPaths => {
-                let paths_back = PathsBackTo::all(map, start);
-                let mut grid = BitGrid::default();
-                for leaf in paths_back.leaves().iter() {
-                    for square in paths_back.path_to_start(leaf) {
-                        grid.insert(square);
-                    }
-                }
-                grid
-            }
+            Self::ShortestPath => PathsBackTo::shortest_path_points(map, start),
+            Self::AllPaths => PathsBackTo::all_path_points(map, start),
         }
     }
 }
