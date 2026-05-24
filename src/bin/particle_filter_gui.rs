@@ -35,6 +35,8 @@ pub fn main() {
     }
 
     let transcript_filename = args[1].as_str();
+    println!("Opening {transcript_filename}...");
+    let start = Instant::now();
     let (transcript, particle_filter) = match transcript_from(transcript_filename) {
         Ok(t) => t,
         Err(e) => {
@@ -42,6 +44,8 @@ pub fn main() {
             return;
         }
     };
+    let duration = Instant::now().duration_since(start).as_secs();
+    println!("Completed in {duration}s.");
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -72,11 +76,8 @@ fn transcript_from(
     if transcript_filename.ends_with(".json") {
         let content = std::fs::read_to_string(transcript_filename)?;
         let particle_filter = serde_json::from_str::<ParticleFilter>(&content)?;
-        let map_inputs = particle_filter
-            .inputs()
-            .ok_or(anyhow::anyhow!("No inputs saved in particle filter"))?;
         Ok((
-            Transcript::from_map_inputs(&map_inputs),
+            Transcript::from_particle_filter(&particle_filter)?,
             Some(particle_filter),
         ))
     } else if transcript_filename.ends_with(".mi") {
@@ -136,6 +137,8 @@ impl CurrentData {
 enum PathsOut {
     None,
     ShortestPath,
+    LongestPath,
+    ShortestPathMinObstacle,
     AllPaths,
 }
 
@@ -144,7 +147,19 @@ impl PathsOut {
         match self {
             Self::None => BitGrid::default(),
             Self::ShortestPath => PathsBackTo::shortest_path_points(map, start),
+            Self::LongestPath => PathsBackTo::all(map, start).longest_path().map_or(BitGrid::default(), |p| p.iter().collect()),
+            Self::ShortestPathMinObstacle => PathsBackTo::all(map, start).shortest_min_obstacle_path(map).map_or(BitGrid::default(), |p| p.iter().collect()),
             Self::AllPaths => PathsBackTo::all_path_points(map, start),
+        }
+    }
+
+    fn leaf_grid(&self, map: &BitGridMap, start: RobotPose<Radians>) -> BitGrid {
+        match self {
+            Self::None => BitGrid::default(),
+            _ => {
+                let pbt = PathsBackTo::all(map, start);
+                pbt.leaves().clone()
+            }
         }
     }
 }
@@ -598,23 +613,15 @@ impl MainApp {
         let shadow = map.robot_shadow(pose);
         let response_rect = response.rect;
         let frontier = map.open_frontier_spaces();
-        let paths_out = show_paths_out.path_out_grid(map, pose);
+        let waypoints = show_paths_out.path_out_grid(map, pose);
+        let leaves = show_paths_out.leaf_grid(map, pose);
         for p in bounds.row_major_coord_iter() {
             let cell = map.cell_for(&p);
             let x_rect = ((p[1] - bounds.min()[1]) as f32) * MAP_CELL_SIZE + response_rect.left();
             let y_rect = ((p[0] - bounds.min()[0]) as f32) * MAP_CELL_SIZE + response_rect.top();
-            let color = cell_color(&paths_out, &frontier, &shadow, cell, p);
+            let color = cell_color(&waypoints, &leaves, &frontier, &shadow, cell, p);
             paint_cell(&painter, x_rect, y_rect, color);
         }
-        
-        // For test cases...
-        /*
-        println!("Rendering map...");
-        println!("{}", serde_json::to_string(&map).unwrap());
-        println!("Pose");
-        println!("{}", serde_json::to_string(&pose).unwrap());
-        println!();
-        */
     }
 }
 
@@ -634,13 +641,18 @@ fn paint_cell(painter: &Painter, x_rect: f32, y_rect: f32, color: Color32) {
 
 fn cell_color(
     waypoints: &BitGrid,
+    leaves: &BitGrid,
     frontier: &BitGrid,
     shadow: &BitGrid,
     cell: Cell,
     p: GridPoint,
 ) -> Color32 {
     if waypoints.contains(&p) && (cell == Cell::Space || cell == Cell::Unvisited) {
-        Color32::ORANGE
+        if leaves.contains(&p) {
+            Color32::DARK_GREEN
+        } else {
+            Color32::ORANGE
+        }
     } else if cell == Cell::Space {
         if frontier.contains(&p) {
             Color32::CYAN

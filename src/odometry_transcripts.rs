@@ -7,10 +7,7 @@ use std::{
 const CREATE3_ODOMETRY_UPDATE_INTERVAL: f64 = 0.05;
 
 use particle_filter::{
-    MapInput,
-    angle::Radians,
-    point::{BoundingBox, FloatPoint},
-    pose::RobotPose,
+    MapInput, ParticleFilter, angle::Radians, point::{BoundingBox, FloatPoint}, pose::RobotPose
 };
 
 use crate::SensorInfo;
@@ -62,6 +59,16 @@ impl Transcript {
         Ok(Self {
             steps: from_transcript(transcript_filename)?,
             actual_ending_point,
+        })
+    }
+  
+    pub fn from_particle_filter(particle_filter: &ParticleFilter) -> anyhow::Result<Self> {
+        let map_inputs = particle_filter
+            .inputs()
+            .ok_or(anyhow::anyhow!("No inputs saved in particle filter"))?;
+        Ok(Self {
+            steps: map_inputs,
+            actual_ending_point: particle_filter.get_actual_ending_point(),
         })
     }
 
