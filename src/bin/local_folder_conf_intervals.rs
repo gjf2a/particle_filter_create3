@@ -52,6 +52,7 @@ fn process_file(
     let contents = std::fs::read_to_string(&filename)?;
     let expr_src = &filename[..filename
         .find(".out")
+        .or_else(|| filename.find(".json"))
         .ok_or(anyhow::anyhow!("No clear source file for {filename}"))?];
     let mut lines = contents.lines();
     let header = lines.by_ref().skip(1).next().unwrap();

@@ -139,6 +139,9 @@ enum PathsOut {
     ShortestPath,
     LongestPath,
     ShortestPathMinObstacle,
+    FreeSpaceCentroid,
+    FarthestFreeShadow,
+    ExplorationTarget,
     AllPaths,
 }
 
@@ -149,6 +152,23 @@ impl PathsOut {
             Self::ShortestPath => PathsBackTo::shortest_path_points(map, start),
             Self::LongestPath => PathsBackTo::all(map, start).longest_path().map_or(BitGrid::default(), |p| p.iter().collect()),
             Self::ShortestPathMinObstacle => PathsBackTo::all(map, start).shortest_min_obstacle_path(map).map_or(BitGrid::default(), |p| p.iter().collect()),
+            Self::FreeSpaceCentroid => {
+                let grid_point = map.to_point(start.pos);
+                let centroid = map.freest_target_within_neighborhood(grid_point);
+                [centroid].iter().collect()
+            }
+            Self::FarthestFreeShadow => {
+                let grid_point = map.to_point(start.pos);
+                let best = map.freest_point_within_shadow(grid_point);
+                [best].iter().collect()
+            }
+            Self::ExplorationTarget => {
+                if let Some(target) = map.exploration_target(start) {
+                    [target].iter().collect()
+                } else {
+                    BitGrid::default()
+                }
+            }
             Self::AllPaths => PathsBackTo::all_path_points(map, start),
         }
     }
