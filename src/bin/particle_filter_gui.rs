@@ -727,14 +727,6 @@ fn render_inconsistencies(ui: &mut Ui, results: &OneRunData) {
         "Total inconsistencies: {}",
         results.total_inconsistencies
     ));
-    ui.label(format!(
-        "Total obstacle/space: {}",
-        results.obstacle_space_issues
-    ));
-    ui.label(format!(
-        "Total discontinuity: {}",
-        results.discontinuity_issues
-    ));
 }
 
 #[derive(Clone)]

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 
 use hash_histogram::HashHistogram;
-use particle_filter::{BitGridMap, Inconsistency, ParticleFilter, ParticleFilterSettings};
+use particle_filter::{BitGridMap, ParticleFilter, ParticleFilterSettings};
 use particle_filter::{angle::Radians, point::FloatPoint, pose::RobotPose};
 use stats_ci::{Confidence, proportion};
 
@@ -70,8 +70,6 @@ pub struct OneRunData {
     pub max_iteration_time: Option<f64>,
     pub iterations_with_inconsistencies: usize,
     pub total_inconsistencies: usize,
-    pub obstacle_space_issues: usize,
-    pub discontinuity_issues: usize,
     pub iteration_inconsistencies: HashHistogram<usize>,
     pub particle_filter: ParticleFilter,
 }
@@ -96,8 +94,6 @@ impl OneRunData {
             max_iteration_time,
             iterations_with_inconsistencies: iteration_inconsistencies.len(),
             total_inconsistencies: iteration_inconsistencies.total_count(),
-            obstacle_space_issues: stats.total_for(&Inconsistency::ObstacleSpaceOverlap),
-            discontinuity_issues: stats.total_for(&Inconsistency::SeparatedSpaces),
             iteration_inconsistencies,
             particle_filter: particle_filter.clone(),
             final_iteration,
@@ -140,8 +136,6 @@ impl OneRunData {
             self.iterations_with_inconsistencies
         );
         println!("Total inconsistencies: {}", self.total_inconsistencies);
-        println!("Total obstacle/space: {}", self.obstacle_space_issues);
-        println!("Total discontinuity: {}", self.discontinuity_issues);
     }
 }
 
