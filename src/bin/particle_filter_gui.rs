@@ -6,13 +6,14 @@ use particle_filter::{
     BitGridMap, Cell, Noises, Particle, ParticleFilter, ParticleFilterSettings, SelectionStrategy,
     WeightStrategy, irobot_create3, path_plan::PathsBackTo,
 };
-use particle_filter::{MapInput, PoseNoise};
+use particle_filter::PoseNoise;
 use particle_filter::{
     angle::{Degrees, Radians},
     bit_grid::BitGrid,
     point::GridPoint,
     pose::RobotPose,
 };
+use particle_filter_create3::transcript_from;
 use particle_filter_create3::{
     cell2color,
     drivers::{MultiRunData, OneRunData, SuccessData},
@@ -68,28 +69,6 @@ pub fn main() {
         }),
     )
     .unwrap();
-}
-
-fn transcript_from(
-    transcript_filename: &str,
-) -> anyhow::Result<(Transcript, Option<ParticleFilter>)> {
-    if transcript_filename.ends_with(".json") {
-        let content = std::fs::read_to_string(transcript_filename)?;
-        let particle_filter = serde_json::from_str::<ParticleFilter>(&content)?;
-        Ok((
-            Transcript::from_particle_filter(&particle_filter)?,
-            Some(particle_filter),
-        ))
-    } else if transcript_filename.ends_with(".mi") {
-        let content = std::fs::read_to_string(transcript_filename)?;
-        let map_inputs = content
-            .lines()
-            .map(|line| line.parse::<MapInput>())
-            .collect::<anyhow::Result<Vec<MapInput>>>()?;
-        Ok((Transcript::from_map_inputs(&map_inputs), None))
-    } else {
-        Transcript::from_transcript(transcript_filename).map(|t| (t, None))
-    }
 }
 
 #[derive(Clone)]
@@ -150,8 +129,12 @@ impl PathsOut {
         match self {
             Self::None => BitGrid::default(),
             Self::ShortestPath => PathsBackTo::shortest_path_points(map, start),
-            Self::LongestPath => PathsBackTo::all(map, start).longest_path().map_or(BitGrid::default(), |p| p.iter().collect()),
-            Self::ShortestPathMinObstacle => PathsBackTo::all(map, start).shortest_min_obstacle_path(map).map_or(BitGrid::default(), |p| p.iter().collect()),
+            Self::LongestPath => PathsBackTo::all(map, start)
+                .longest_path()
+                .map_or(BitGrid::default(), |p| p.iter().collect()),
+            Self::ShortestPathMinObstacle => PathsBackTo::all(map, start)
+                .shortest_min_obstacle_path(map)
+                .map_or(BitGrid::default(), |p| p.iter().collect()),
             Self::FreeSpaceCentroid => {
                 let grid_point = map.to_point(start.pos);
                 let centroid = map.freest_target_within_neighborhood(grid_point);

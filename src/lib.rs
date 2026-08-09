@@ -4,8 +4,33 @@ pub mod odometry_transcripts;
 use std::{fmt::Display, str::FromStr};
 
 use eframe::egui::Color32;
+use particle_filter::ParticleFilter;
 use particle_filter::{Cell, MapInput, irobot_create3::Bump};
 use particle_filter::{angle::Radians, point::FloatPoint, pose::RobotPose};
+
+use crate::odometry_transcripts::Transcript;
+
+pub fn transcript_from(
+    transcript_filename: &str,
+) -> anyhow::Result<(Transcript, Option<ParticleFilter>)> {
+    if transcript_filename.ends_with(".json") {
+        let content = std::fs::read_to_string(transcript_filename)?;
+        let particle_filter = serde_json::from_str::<ParticleFilter>(&content)?;
+        Ok((
+            Transcript::from_particle_filter(&particle_filter)?,
+            Some(particle_filter),
+        ))
+    } else if transcript_filename.ends_with(".mi") {
+        let content = std::fs::read_to_string(transcript_filename)?;
+        let map_inputs = content
+            .lines()
+            .map(|line| line.parse::<MapInput>())
+            .collect::<anyhow::Result<Vec<MapInput>>>()?;
+        Ok((Transcript::from_map_inputs(&map_inputs), None))
+    } else {
+        Transcript::from_transcript(transcript_filename).map(|t| (t, None))
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SensorInfo {
